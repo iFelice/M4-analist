@@ -1,0 +1,9 @@
+streamlit
+pandas
+requests
+numpy
+scipy
+google-generativeai
+duckduckgo_search
+beautifulsoup4
+lxml
