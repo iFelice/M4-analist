@@ -8,23 +8,20 @@ from duckduckgo_search import DDGS
 import google.generativeai as genai
 from scraper_xg import get_understat_xg, get_market_values
 
-# --- CONFIGURAZIONE CORE ---
-if "GEMINI_API_KEY" in st.secrets:
-    GEMINI_API_KEY = st.secrets["GEMINI_API_KEY"]
-else:
-    GEMINI_API_KEY = "AIzaSyBPyuLxsTcTgqgndgLP3B8R_UpcrkuDA6E"
-
-API_KEY_ODDS = "a310fd7b74f24f2736a57c6caf768118"
-API_KEY_DATA = "c299e4a676a54d48a642f20bca7f4480"
-
-# Fix Errore 404: Usiamo il path completo del modello
+# --- CONFIGURAZIONE CORE (VERSIONE CORRETTA PER ONLINE) ---
 try:
-    genai.configure(api_key=GEMINI_API_KEY)
-    gemini_model = genai.GenerativeModel('models/gemini-1.5-flash')
+    # Cerchiamo prima nei Secrets di Streamlit (Online)
+    GEMINI_API_KEY = st.secrets["GEMINI_API_KEY"]
 except:
-    gemini_model = None
+    # Se non lo trova, usa la chiave manuale (Locale)
+    GEMINI_API_KEY = "AIzaSyBQ-dVFpVLuOYak_qff-YG8kSb1Vpwcj3I"
 
-st.set_page_config(page_title="M4 Strategic Terminal", layout="wide")
+if GEMINI_API_KEY:
+    genai.configure(api_key=GEMINI_API_KEY)
+    # RIMOSSO 'models/' -> Ora usiamo solo il nome puro
+    gemini_model = genai.GenerativeModel('gemini-1.5-flash')
+else:
+    st.error("Configura la chiave GEMINI_API_KEY nei Secrets di Streamlit!")
 
 # --- GESTIONE TEMA ---
 theme = st.sidebar.select_slider("⚙️ SELEZIONA TEMA", options=["LIGHT", "DARK"], value="DARK")
