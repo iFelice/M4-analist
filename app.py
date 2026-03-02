@@ -8,20 +8,19 @@ from duckduckgo_search import DDGS
 import google.generativeai as genai
 from scraper_xg import get_understat_xg, get_market_values
 
-# --- CONFIGURAZIONE CORE (VERSIONE CORRETTA PER ONLINE) ---
-try:
-    # Cerchiamo prima nei Secrets di Streamlit (Online)
-    GEMINI_API_KEY = st.secrets["GEMINI_API_KEY"]
-except:
-    # Se non lo trova, usa la chiave manuale (Locale)
-    GEMINI_API_KEY = "AIzaSyBQ-dVFpVLuOYak_qff-YG8kSb1Vpwcj3I"
+# --- CONFIGURAZIONE CHIAVI (GITHUB/CLOUD) ---
+GEMINI_API_KEY = st.secrets.get("GEMINI_API_KEY", "AIzaSyBQ-dVFpVLuOYak_qff-YG8kSb1Vpwcj3I")
+API_KEY_ODDS = "a310fd7b74f24f2736a57c6caf768118"
+API_KEY_DATA = "c299e4a676a54d48a642f20bca7f4480"
 
-if GEMINI_API_KEY:
+# Inizializzazione AI (Fix Errore 404)
+try:
     genai.configure(api_key=GEMINI_API_KEY)
-    # RIMOSSO 'models/' -> Ora usiamo solo il nome puro
     gemini_model = genai.GenerativeModel('gemini-1.5-flash')
-else:
-    st.error("Configura la chiave GEMINI_API_KEY nei Secrets di Streamlit!")
+except Exception as e:
+    st.error(f"Errore inizializzazione AI: {e}")
+
+st.set_page_config(page_title="M4 Strategic Terminal", layout="wide", initial_sidebar_state="expanded")
 
 # --- GESTIONE TEMA ---
 theme = st.sidebar.select_slider("⚙️ SELEZIONA TEMA", options=["LIGHT", "DARK"], value="DARK")
@@ -30,13 +29,14 @@ if theme == "DARK":
 else:
     bg, card, txt, border, stat_bg, lbl = "#f0f2f5", "#ffffff", "#1a1d23", "#e0e4e9", "#f8f9fa", "#0056b3"
 
-# --- CSS PROFESSIONALE (STILE REPLIT/NERDYTIPS) ---
+# --- CSS DEFINITIVO (REPLIT DESIGN + FONT 15PX) ---
 st.markdown(f"""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&display=swap');
     html, body, [data-testid="stapp"] {{ background-color: {bg} !important; color: {txt} !important; font-family: 'Inter', sans-serif; }}
     .stApp {{ background-color: {bg}; }}
     
+    /* Header Stile Replit */
     .maradona-header {{
         background: linear-gradient(rgba(0, 45, 91, 0.8), rgba(0, 45, 91, 0.8)), 
                     url('https://images.unsplash.com/photo-1574629810360-7efbbe195018?auto=format&fit=crop&w=1600&q=80');
@@ -44,13 +44,15 @@ st.markdown(f"""
         border-radius: 0 0 20px 20px; text-align: center; margin: -60px -60px 30px -60px; color: white;
     }}
 
-    .top-metric-card {{
+    /* Top Cards */
+    .metric-card {{
         background: {card}; border: 1px solid {border}; border-radius: 12px;
         padding: 20px; text-align: left; box-shadow: 0 4px 6px rgba(0,0,0,0.05);
     }}
     .metric-label {{ color: #8b949e; font-size: 11px; text-transform: uppercase; font-weight: 700; }}
     .metric-value {{ color: {txt}; font-size: 24px; font-weight: 800; display: block; }}
 
+    /* Table System */
     .table-head {{ background-color: {card}; padding: 12px 20px; border-radius: 8px; display: flex; font-size: 11px; color: #8b949e; font-weight: 700; text-transform: uppercase; margin-bottom: 5px; border: 1px solid {border}; }}
     .match-card {{ background-color: {card}; border-radius: 10px; padding: 15px 20px; margin-bottom: 5px; border: 1px solid {border}; display: flex; align-items: center; }}
     
@@ -59,12 +61,14 @@ st.markdown(f"""
     .match-date {{ font-size: 15px !important; color: #3b82f6 !important; font-weight: 700; display: block; }}
     
     .team-name {{ font-size: 19px; font-weight: 800; color: {lbl}; text-transform: uppercase; }}
-    .stat-container {{ background-color: {stat_bg}; border: 1px solid {border}; border-radius: 6px; padding: 8px; text-align: center; height: 100%; }}
+    .stat-container {{ background-color: {stat_bg}; border: 1px solid {border}; border-radius: 8px; padding: 10px; text-align: center; height: 100%; }}
     .val-p-green {{ color: #28a745; font-size: 16px; font-weight: 800; }}
     .val-p-red {{ color: #dc3545; font-size: 16px; font-weight: 800; }}
     
-    /* Billy Chat Color Fix */
-    [data-testid="stChatMessage"] {{ color: {txt} !important; }}
+    .master-pick-box {{ background-color: #10b981; padding: 20px; border-radius: 10px; text-align: center; color: white; font-weight: 800; font-size: 24px; margin-top:15px; border: 2px solid white; }}
+    
+    /* Popup AI */
+    div[data-testid="stDialog"] div[role="dialog"] {{ background-color: {card} !important; color: {txt} !important; border: 1px solid {border}; }}
     [data-testid="stVerticalBlock"] > div {{ gap: 0rem !important; }}
     </style>
     """, unsafe_allow_html=True)
@@ -87,6 +91,7 @@ def get_league_engine(camp_key):
     df = df.dropna(subset=['HomeTeam', 'AwayTeam', 'FTR']).sort_values('Date')
     df['HomeClean'] = df['HomeTeam'].apply(clean_name); df['AwayClean'] = df['AwayTeam'].apply(clean_name)
     xg_data = get_understat_xg(camp_key)
+    mkt_values = get_market_values()
     avg_h, avg_a = df['FTHG'].mean(), df['FTAG'].mean()
     stats = {}
     for t in pd.concat([df['HomeClean'], df['AwayClean']]).unique():
@@ -95,7 +100,8 @@ def get_league_engine(camp_key):
         else:
             att = ((h_h['FTHG'].mean()/avg_h)+(a_h['FTAG'].mean()/avg_a))/2 if not h_h.empty else 1.0
             defe = ((h_h['FTAG'].mean()/avg_a)+(a_h['FTHG'].mean()/avg_h))/2 if not a_h.empty else 1.0
-        stats[t] = {'att': att, 'def': defe}
+        val = mkt_values.get(t, 50)
+        stats[t] = {'att': att * (1 + (val/6000)), 'def': defe * (1 - (val/6000)), 'val': val}
     return stats, avg_h, avg_a, df
 
 def get_full_poisson(h_e, a_e):
@@ -105,60 +111,58 @@ def get_full_poisson(h_e, a_e):
     return {"1": np.sum(np.tril(matrix, -1)), "X": np.sum(np.diag(matrix)), "2": np.sum(np.triu(matrix, 1)),
             "u15": get_u(1.5), "u25": get_u(2.5), "u35": get_u(3.5), "gg": (1-h_p[0])*(1-a_p[0])}
 
-# --- POPUP AI (GEMINI FIX) ---
+# --- POPUP AI (GEMINI) ---
 @st.dialog("STRATEGIC ANALYSIS", width="large")
 def show_details(h, a, m):
-    with st.spinner("Billy Walters sta analizzando..."):
-        query = f"formazioni ufficiali infortunati meteo {h} {a} 2026 sky sport"
+    with st.spinner("Billy Walters (AI) sta analizzando i dati..."):
+        query = f"formazioni ufficiali infortunati meteo {h} {a} 2026 whoscored sky sport"
         news = ""
         try:
             with DDGS() as ddgs:
                 for r in ddgs.text(query, max_results=5): news += f" {r['body']}"
-        except: news = "News non disponibili."
+        except: news = "News web non raggiungibili."
         
-        prompt = f"""SEI BILLY WALTERS. RISPONDI SOLO IN ITALIANO.
-        Analizza {h} vs {a}. AI Poisson: 1({m['1']:.0%}), X({m['X']:.0%}), 2({m['2']:.0%}), O2.5({1-m['u25']:.0%}).
+        prompt = f"""SEI BILLY WALTERS. RISPONDI IN ITALIANO.
+        Analizza {h} vs {a}. AI Poisson: 1({m['1']:.0%}), X({m['X']:.0%}), 2({m['2']:.0%}).
         News: {news}. 
-        1. Analisi formazioni (3 righe). 2. PRONOSTICO MASTER. 3. PROB PERCENTUALE."""
+        1. Analisi Formazioni e Meteo (3 righe). 
+        2. PRONOSTICO MASTER: [Indica la giocata migliore tra 1X2, GG/NG o Over]. 
+        3. PROB: [Numero intero probabilità finale].
+        NON USARE ASTERISCHI."""
         
         try:
-            res = gemini_model.generate_content(prompt)
-            st.markdown(f"<div style='line-height:1.2; font-size:16px;'>{res.text.replace('*','')}</div>", unsafe_allow_html=True)
+            response = gemini_model.generate_content(prompt)
+            st.markdown(f"<div style='line-height:1.2; font-size:16px;'>{response.text}</div>", unsafe_allow_html=True)
         except Exception as e:
-            st.error(f"Errore Gemini: {e}. Controlla la tua API Key nei Secrets.")
+            st.error(f"Errore AI: {e}")
 
 # --- UI PRINCIPALE ---
-st.markdown('<div class="maradona-header"><h1>M4 STRATEGIC TERMINAL</h1><p>Intelligence Evolution v26.0</p></div>', unsafe_allow_html=True)
+st.markdown('<div class="maradona-header"><h1>M4 STRATEGIC TERMINAL</h1><p>Powered by Billy Walters AI</p></div>', unsafe_allow_html=True)
 
-# 1. Top Metrics
+# Top Cards
 col_m1, col_m2, col_m3, col_m4 = st.columns(4)
-with col_m1: st.markdown(f'<div class="top-metric-card"><span class="metric-label">Match Caricati</span><span class="metric-value">20</span></div>', unsafe_allow_html=True)
-with col_m2: st.markdown(f'<div class="top-metric-card"><span class="metric-label">Value Trovati</span><span class="metric-value">5</span></div>', unsafe_allow_html=True)
-with col_m3: st.markdown(f'<div class="top-metric-card"><span class="metric-label">Best Edge</span><span class="metric-value">+15.4%</span></div>', unsafe_allow_html=True)
-with col_m4: st.markdown(f'<div class="top-metric-card"><span class="metric-label">Avg GG %</span><span class="metric-value">52%</span></div>', unsafe_allow_html=True)
+with col_m1: st.markdown(f'<div class="metric-card"><span class="metric-label">Match Caricati</span><span class="metric-value">20</span></div>', unsafe_allow_html=True)
+with col_m2: st.markdown(f'<div class="metric-card"><span class="metric-label">Value Trovati</span><span class="metric-value">5</span></div>', unsafe_allow_html=True)
+with col_m3: st.markdown(f'<div class="metric-card"><span class="metric-label">Best Edge</span><span class="metric-value">+15.4%</span></div>', unsafe_allow_html=True)
+with col_m4: st.markdown(f'<div class="metric-card"><span class="metric-label">Avg GG %</span><span class="metric-value">52%</span></div>', unsafe_allow_html=True)
 
-# 2. Sidebar
+# Sidebar
 with st.sidebar:
     st.title("🎩 Billy Chat")
     camp_sel = st.selectbox("CAMPIONATO", ["Serie A", "Premier League", "La Liga", "Bundesliga"])
     if st.button("🔄 SINCRONIZZA TURNO"):
         l_map = {"Serie A": "SA", "Premier League": "PL", "La Liga": "PD", "Bundesliga": "BL1"}
-        st.session_state.live_data = requests.get(f"https://api.football-data.org/v4/competitions/{l_map[camp_sel]}/matches?status=SCHEDULED", headers={'X-Auth-Token': API_KEY_DATA}).json().get('matches', [])
+        url_p = f"https://api.football-data.org/v4/competitions/{l_map[camp_sel]}/matches?status=SCHEDULED"
+        st.session_state.live_data = requests.get(url_p, headers={'X-Auth-Token': API_KEY_DATA}).json().get('matches', [])
     
-    if "messages" not in st.session_state: st.session_state.messages = []
-    for msg in st.session_state.messages:
-        with st.chat_message(msg["role"]): st.write(msg["content"])
-    if p := st.chat_input("Chiedi a Billy..."):
-        st.session_state.messages.append({"role": "user", "content": p})
-        with st.chat_message("assistant"):
-            res = gemini_model.generate_content(f"Sei Billy Walters. Rispondi a: {p}")
-            st.session_state.messages.append({"role": "assistant", "content": res.text})
-            st.rerun()
+    if "live_data" in st.session_state and st.session_state.live_data:
+        giornate = sorted(list(set([m['matchday'] for m in st.session_state.live_data])))
+        g_sel = st.selectbox("FILTRA PER GIORNATA", giornate)
 
 engine = get_league_engine(camp_sel)
 if 'live_data' in st.session_state and engine:
     team_stats, avg_h, avg_a, df_full = engine
-    g_sel = st.session_state.live_data[0]['matchday']
+    matches = [m for m in st.session_state.live_data if m['matchday'] == g_sel]
     st.subheader(f"🏟️ {camp_sel.upper()} - GIORNATA {g_sel}")
     
     st.markdown("""<div class='table-head'>
@@ -167,7 +171,6 @@ if 'live_data' in st.session_state and engine:
         <div style='flex:1; text-align:center'>U/O 3.5</div><div style='flex:1; text-align:center'>GG / NG</div><div style='width:5%'></div>
     </div>""", unsafe_allow_html=True)
 
-    matches = [m for m in st.session_state.live_data if m['matchday'] == g_sel]
     for idx, match in enumerate(matches):
         h_api, a_api = match['homeTeam']['shortName'], match['awayTeam']['shortName']
         h_cl, a_cl = clean_name(h_api), clean_name(a_api)
