@@ -13,13 +13,12 @@ GEMINI_API_KEY = st.secrets.get("GEMINI_API_KEY", "AIzaSyBQ-dVFpVLuOYak_qff-YG8k
 API_KEY_ODDS = "a310fd7b74f24f2736a57c6caf768118"
 API_KEY_DATA = "c299e4a676a54d48a642f20bca7f4480"
 
-# Inizializzazione AI - Path super-stabile per evitare il 404
+# Inizializzazione AI con path universale per evitare 404
 try:
     genai.configure(api_key=GEMINI_API_KEY)
-    # Usiamo il nome del modello senza prefissi v1beta per massima compatibilità
     gemini_model = genai.GenerativeModel('gemini-1.5-flash')
 except Exception as e:
-    st.error(f"Errore critico AI: {e}")
+    gemini_model = None
 
 st.set_page_config(page_title="M4 STRATEGIC TERMINAL", layout="wide", initial_sidebar_state="expanded")
 
@@ -43,7 +42,7 @@ st.markdown(f"""
         background-size: cover; background-position: center; padding: 40px;
         border-radius: 0 0 20px 20px; text-align: center; margin: -60px -60px 30px -60px; color: white;
     }}
-    .match-card {{ background-color: {card}; border-radius: 12px; padding: 15px; margin-bottom: 8px; border: 1px solid {border}; }}
+    .match-card {{ background-color: {card}; border-radius: 12px; padding: 25px; margin-bottom: 8px; border: 1px solid {border}; box-shadow: 0 2px 8px rgba(0,0,0,0.05); }}
     .team-name {{ font-size: 19px; font-weight: 800; color: #58a6ff; text-transform: uppercase; }}
     
     /* FONT RICHIESTI A 15PX */
@@ -51,9 +50,9 @@ st.markdown(f"""
     .match-date {{ font-size: 15px !important; color: #3b82f6 !important; font-weight: 700; display: block; margin-top: 5px; }}
 
     .stat-container {{ background-color: {stat_bg}; border: 1px solid {border}; border-radius: 8px; padding: 10px; text-align: center; height: 100%; }}
-    .val-sign {{ color: {txt} !important; font-weight: 800; font-size: 14px; margin-bottom: 2px; }}
-    .val-p-green {{ color: #28a745; font-size: 18px; font-weight: 800; }}
-    .val-p-red {{ color: #dc3545; font-size: 18px; font-weight: 800; }}
+    .val-sign {{ color: {txt} !important; font-weight: 800; font-size: 13px; margin-bottom: 2px; }}
+    .val-p-green {{ color: #28a745; font-size: 17px; font-weight: 800; }}
+    .val-p-red {{ color: #dc3545; font-size: 17px; font-weight: 800; }}
     .val-q {{ color: #856404; font-size: 14px; font-weight: 700; display: block; margin-top: 3px; font-family: monospace; }}
     
     [data-testid="stVerticalBlock"] > div {{ gap: 0rem !important; }}
@@ -63,9 +62,9 @@ st.markdown(f"""
 # --- MOTORE LOGICO ---
 def clean_name(name):
     n = str(name).strip()
-    m = {"Manchester United": "Man United", "Manchester City": "Man City", "Inter Milan": "Inter", "AC Milan": "Milan", "Atalanta BC": "Atalanta", "Hellas Verona": "Verona", "Lazio Roma": "Lazio"}
+    m = {"Manchester United": "Man United", "Manchester City": "Man City", "Tottenham Hotspur": "Tottenham", "Inter Milan": "Inter", "AC Milan": "Milan", "Atalanta BC": "Atalanta", "Hellas Verona": "Verona"}
     n = m.get(n, n)
-    for r in ["BC", "FC", "AC ", "AS ", "1907", "Calcio", "1900"]: n = n.replace(r, "")
+    for r in ["BC", "FC", "AC ", "AS ", "1907", "Calcio"]: n = n.replace(r, "")
     return n.strip()
 
 @st.cache_data
@@ -93,6 +92,90 @@ def get_league_engine(camp_key):
 
 def get_full_poisson(h_e, a_e):
     h_p = [poisson.pmf(i, h_e) for i in range(8)]; a_p = [poisson.pmf(i, a_e) for i in range(8)]
+    matrix = np.outer(h_p, a_p)
+    def get_u(limit): return sum([matrix[i,j] for i in range(8) for j in range(8) if i+j < limit])
+    return {"1": np.sum(np.tril(matrix, -1)), "X": np.sum(np.diag(matrix)), "2": np.sum(np.triu(matrix, 1)),
+            "u15": get_u(1.5), "u25": get_u(2.5), "u35": get_u(3.5), "gg": (1-h_p[0])*(1-a_p[0])}
+
+# --- POPUP AI ---
+@st.dialog("STRATEGIC ANALYSIS", width="large")
+def show_details(h, a, m):
+    if not gemini_model:
+        st.error("Billy non è configurato correttamente.")
+        return
+    with st.spinner("Billy Walters sta analizzando..."):
+        query = f"formazioni ufficiali infortunati meteo {h} {a} 2026 sky sport"
+        news = ""
+        try:
+            with DDGS() as ddgs:
+                for r in ddgs.text(query, max_results=5): news += f" {r['body']}"
+        except: news = "News web non disponibili."
+        prompt = f"Analizza {h} vs {a}. AI Stats: 1({m['1']:.0%}), X({m['X']:.0%}), 2({m['2']:.0%}), O2.5({1-m['u25']:.0%}). News: {news}. Rispondi in italiano con un'analisi di 3 righe e un pronostico master."
+        try:
+            res = gemini_model.generate_content(prompt)
+            st.markdown(f"<div style='line-height:1.2; font-size:16px;'>{res.text.replace('*','')}</div>", unsafe_allow_html=True)
+        except Exception as e:
+            st.error(f"Errore Billy: {e}")
+
+# --- UI PRINCIPALE ---
+st.markdown('<div class="maradona-header"><h1>M4 STRATEGIC TERMINAL</h1><p>Intelligence Evolution v28.1</p></div>', unsafe_allow_html=True)
+with st.sidebar:
+    st.title("🎩 Billy Walters Chat")
+    camp_sel = st.selectbox("CAMPIONATO", ["Serie A", "Premier League", "La Liga", "Bundesliga"])
+    if st.button("🔄 SINCRONIZZA TURNO"):
+        l_map = {"Serie A": "SA", "Premier League": "PL", "La Liga": "PD", "Bundesliga": "BL1"}
+        try:
+            st.session_state.live_data = requests.get(f"https://api.football-data.org/v4/competitions/{l_map[camp_sel]}/matches?status=SCHEDULED", headers={'X-Auth-Token': API_KEY_DATA}).json().get('matches', [])
+            st.session_state.live_odds = requests.get(f"https://api.the-odds-api.com/v4/sports/soccer_{camp_sel.lower().replace(' ','_')}/odds/?apiKey={API_KEY_ODDS}&regions=eu&markets=h2h").json()
+        except: st.sidebar.error("Errore sincronizzazione dati.")
+    if "live_data" in st.session_state:
+        giornate = sorted(list(set([m['matchday'] for m in st.session_state.live_data])))
+        g_sel = st.selectbox("FILTRA PER GIORNATA", giornate)
+
+engine = get_league_engine(camp_sel)
+if 'live_data' in st.session_state and engine:
+    team_stats, avg_h, avg_a, df_full = engine
+    matches = [m for m in st.session_state.live_data if m['matchday'] == g_sel]
+    st.subheader(f"🏟️ {camp_sel.upper()} - GIORNATA {g_sel}")
+    
+    for idx, match in enumerate(matches):
+        h_api, a_api = match['homeTeam']['shortName'], match['awayTeam']['shortName']
+        h_cl, a_cl = clean_name(h_api), clean_name(a_api)
+        dt = (datetime.strptime(match['utcDate'], "%Y-%m-%dT%H:%M:%SZ") + timedelta(hours=1)).strftime("%d/%m | %H:%M")
+        
+        # FIX QUOTE: Controllo se live_odds è una lista
+        q1, qX, q2 = 1.0, 1.0, 1.0
+        if 'live_odds' in st.session_state and isinstance(st.session_state.live_odds, list):
+            for mo in st.session_state.live_odds:
+                if h_cl in clean_name(mo.get('home_team', '')):
+                    try:
+                        odds = {o['name']: o['price'] for o in mo['bookmakers'][0]['markets'][0]['outcomes']}
+                        q1, qX, q2 = odds.get(mo['home_team'], 1.0), odds.get('Draw', odds.get('Tie', 1.0)), odds.get(mo['away_team'], 1.0)
+                    except: pass
+
+        h_s, a_s = team_stats.get(h_cl, {'att': 0.85, 'def': 1.15}), team_stats.get(a_cl, {'att': 0.85, 'def': 1.15})
+        m = get_full_poisson(h_s['att'] * a_s['def'] * avg_h, a_s['att'] * h_s['def'] * avg_a)
+        
+        with st.container():
+            st.markdown(f'<div class="match-card">', unsafe_allow_html=True)
+            c_h, c1, c2, c3, c4, c5, c6 = st.columns([1.5, 1.2, 0.8, 0.8, 0.8, 1, 0.4])
+            with c_h: st.markdown(f"<span class='team-name'>{h_api}<br>{a_api}</span><br><span class='match-date'>🕒 {dt.replace('Jan','Gen')}</span>", unsafe_allow_html=True)
+            with c1: # 1X2 Stacked
+                st.markdown(f"""<div class='stat-container'><span class='label-header'>Esito 1X2</span>
+                <div style='display:flex; justify-content:space-around'>
+                    <div><span class='val-sign'>1</span><br><span class='val-p-green'>{m['1']:.0%}</span><br><span class='val-q'>{q1}</span></div>
+                    <div><span class='val-sign'>X</span><br><span class='val-p-green'>{m['X']:.0%}</span><br><span class='val-q'>{qX}</span></div>
+                    <div><span class='val-sign'>2</span><br><span class='val-p-green'>{m['2']:.0%}</span><br><span class='val-q'>{q2}</span></div>
+                </div></div>""", unsafe_allow_html=True)
+            with c2: st.markdown(f"<div class='stat-container'><span class='label-header'>U/O 1.5</span><span class='val-p-red'>{m['u15']:.0%}</span> / <span class='val-p-green'>{(1-m['u15']):.0%}</span></div>", unsafe_allow_html=True)
+            with c3: st.markdown(f"<div class='stat-container'><span class='label-header'>U/O 2.5</span><span class='val-p-red'>{m['u25']:.0%}</span> / <span class='val-p-green'>{(1-m['u25']):.0%}</span></div>", unsafe_allow_html=True)
+            with c4: st.markdown(f"<div class='stat-container'><span class='label-header'>U/O 3.5</span><span class='val-p-red'>{m['u35']:.0%}</span> / <span class='val-p-green'>{(1-m['u35']):.0%}</span></div>", unsafe_allow_html=True)
+            with c5: st.markdown(f"<div class='stat-container'><span class='label-header'>GG / NG</span><span class='val-p-green'>{m['gg']:.0%}</span> / <span class='val-p-red'>{(1-m['gg']):.0%}</span></div>", unsafe_allow_html=True)
+            with c6:
+                st.write("<br>", unsafe_allow_html=True); st.button("🔍", key=f"ex_{idx}", on_click=show_details, args=(h_api, a_api, m))
+            st.markdown("</div>", unsafe_allow_html=True)
+else:
+    st.info("👋 Terminale Pronto. Sincronizza per caricare la giornata.")    h_p = [poisson.pmf(i, h_e) for i in range(8)]; a_p = [poisson.pmf(i, a_e) for i in range(8)]
     matrix = np.outer(h_p, a_p)
     def get_u(limit): return sum([matrix[i,j] for i in range(8) for j in range(8) if i+j < limit])
     return {"1": np.sum(np.tril(matrix, -1)), "X": np.sum(np.diag(matrix)), "2": np.sum(np.triu(matrix, 1)),
