@@ -8,66 +8,54 @@ from duckduckgo_search import DDGS
 import google.generativeai as genai
 from scraper_xg import get_understat_xg, get_market_values
 
-# --- CONFIGURAZIONE CHIAVI (GITHUB/CLOUD) ---
-GEMINI_API_KEY = st.secrets.get("GEMINI_API_KEY", "AIzaSyBQ-dVFpVLuOYak_qff-YG8kSb1Vpwcj3I")
+# --- CONFIGURAZIONE CHIAVI (CLOUD SAFE) ---
+# Prende la chiave dai Secrets di Streamlit Cloud
+GEMINI_API_KEY = st.secrets.get("GEMINI_API_KEY", "")
+
+# Inizializzazione AI con gestione errore 404
+if GEMINI_API_KEY:
+    try:
+        genai.configure(api_key=GEMINI_API_KEY)
+        # Cambiato in gemini-1.5-flash (senza modelli/ o v1beta)
+        gemini_model = genai.GenerativeModel('gemini-1.5-flash')
+    except Exception as e:
+        st.error(f"Errore configurazione AI: {e}")
+        gemini_model = None
+else:
+    st.error("⚠️ Chiave GEMINI_API_KEY non trovata nei Secrets di Streamlit!")
+    gemini_model = None
+
 API_KEY_ODDS = "a310fd7b74f24f2736a57c6caf768118"
 API_KEY_DATA = "c299e4a676a54d48a642f20bca7f4480"
 
-# Inizializzazione AI (Fix Errore 404)
-try:
-    genai.configure(api_key=GEMINI_API_KEY)
-    gemini_model = genai.GenerativeModel('gemini-1.5-flash')
-except Exception as e:
-    st.error(f"Errore inizializzazione AI: {e}")
-
-st.set_page_config(page_title="M4 Strategic Terminal", layout="wide", initial_sidebar_state="expanded")
+st.set_page_config(page_title="M4 STRATEGIC TERMINAL", layout="wide", initial_sidebar_state="expanded")
 
 # --- GESTIONE TEMA ---
-theme = st.sidebar.select_slider("⚙️ SELEZIONA TEMA", options=["LIGHT", "DARK"], value="DARK")
+theme = st.sidebar.select_slider("⚙️ TEMA", options=["LIGHT", "DARK"], value="DARK")
 if theme == "DARK":
     bg, card, txt, border, stat_bg, lbl = "#0b0e11", "#161b22", "#ffffff", "#30363d", "#0d1117", "#58a6ff"
 else:
     bg, card, txt, border, stat_bg, lbl = "#f0f2f5", "#ffffff", "#1a1d23", "#e0e4e9", "#f8f9fa", "#0056b3"
 
-# --- CSS DEFINITIVO (REPLIT DESIGN + FONT 15PX) ---
+# --- CSS PROFESSIONALE ---
 st.markdown(f"""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&display=swap');
     html, body, [data-testid="stapp"] {{ background-color: {bg} !important; color: {txt} !important; font-family: 'Inter', sans-serif; }}
     .stApp {{ background-color: {bg}; }}
-    
-    /* Header Stile Replit */
     .maradona-header {{
         background: linear-gradient(rgba(0, 45, 91, 0.8), rgba(0, 45, 91, 0.8)), 
                     url('https://images.unsplash.com/photo-1574629810360-7efbbe195018?auto=format&fit=crop&w=1600&q=80');
         background-size: cover; background-position: center; padding: 40px;
         border-radius: 0 0 20px 20px; text-align: center; margin: -60px -60px 30px -60px; color: white;
     }}
-
-    /* Top Cards */
-    .metric-card {{
-        background: {card}; border: 1px solid {border}; border-radius: 12px;
-        padding: 20px; text-align: left; box-shadow: 0 4px 6px rgba(0,0,0,0.05);
-    }}
-    .metric-label {{ color: #8b949e; font-size: 11px; text-transform: uppercase; font-weight: 700; }}
-    .metric-value {{ color: {txt}; font-size: 24px; font-weight: 800; display: block; }}
-
-    /* Table System */
-    .table-head {{ background-color: {card}; padding: 12px 20px; border-radius: 8px; display: flex; font-size: 11px; color: #8b949e; font-weight: 700; text-transform: uppercase; margin-bottom: 5px; border: 1px solid {border}; }}
-    .match-card {{ background-color: {card}; border-radius: 10px; padding: 15px 20px; margin-bottom: 5px; border: 1px solid {border}; display: flex; align-items: center; }}
-    
-    /* Font richiesti a 15px */
-    .label-header {{ color: {lbl}; font-size: 15px !important; font-weight: 900; text-transform: uppercase; display: block; margin-bottom: 5px; border-bottom: 1px solid {border}; }}
-    .match-date {{ font-size: 15px !important; color: #3b82f6 !important; font-weight: 700; display: block; }}
-    
-    .team-name {{ font-size: 19px; font-weight: 800; color: {lbl}; text-transform: uppercase; }}
+    .match-card {{ background-color: {card}; border-radius: 12px; padding: 20px; margin-bottom: 8px; border: 1px solid {border}; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }}
+    .team-name {{ font-size: 19px; font-weight: 800; color: #58a6ff; text-transform: uppercase; }}
+    .match-date {{ font-size: 15px !important; color: #3b82f6 !important; font-weight: 700; display: block; margin-top: 8px; }}
     .stat-container {{ background-color: {stat_bg}; border: 1px solid {border}; border-radius: 8px; padding: 10px; text-align: center; height: 100%; }}
-    .val-p-green {{ color: #28a745; font-size: 16px; font-weight: 800; }}
-    .val-p-red {{ color: #dc3545; font-size: 16px; font-weight: 800; }}
-    
-    .master-pick-box {{ background-color: #10b981; padding: 20px; border-radius: 10px; text-align: center; color: white; font-weight: 800; font-size: 24px; margin-top:15px; border: 2px solid white; }}
-    
-    /* Popup AI */
+    .label-header {{ color: {lbl}; font-size: 15px !important; font-weight: 900; text-transform: uppercase; display: block; margin-bottom: 5px; border-bottom: 1px solid {border}; }}
+    .val-p-green {{ color: #28a745; font-size: 17px; font-weight: 800; }}
+    .val-p-red {{ color: #dc3545; font-size: 17px; font-weight: 800; }}
     div[data-testid="stDialog"] div[role="dialog"] {{ background-color: {card} !important; color: {txt} !important; border: 1px solid {border}; }}
     [data-testid="stVerticalBlock"] > div {{ gap: 0rem !important; }}
     </style>
@@ -78,7 +66,7 @@ def clean_name(name):
     n = str(name).strip()
     m = {"Manchester United": "Man United", "Manchester City": "Man City", "Inter Milan": "Inter", "AC Milan": "Milan", "Atalanta BC": "Atalanta", "Hellas Verona": "Verona", "Lazio Roma": "Lazio"}
     n = m.get(n, n)
-    for r in ["BC", "FC", "AC ", "AS ", "1907", "Calcio"]: n = n.replace(r, "")
+    for r in ["BC", "FC", "AC ", "AS ", "1907", "Calcio", "1900"]: n = n.replace(r, "")
     return n.strip()
 
 @st.cache_data
@@ -111,50 +99,41 @@ def get_full_poisson(h_e, a_e):
     return {"1": np.sum(np.tril(matrix, -1)), "X": np.sum(np.diag(matrix)), "2": np.sum(np.triu(matrix, 1)),
             "u15": get_u(1.5), "u25": get_u(2.5), "u35": get_u(3.5), "gg": (1-h_p[0])*(1-a_p[0])}
 
-# --- POPUP AI (GEMINI) ---
+# --- POPUP STRATEGICO ---
 @st.dialog("STRATEGIC ANALYSIS", width="large")
 def show_details(h, a, m):
-    with st.spinner("Billy Walters (AI) sta analizzando i dati..."):
-        query = f"formazioni ufficiali infortunati meteo {h} {a} 2026 whoscored sky sport"
+    if not gemini_model:
+        st.error("Billy non ha un cervello attivo. Controlla la API Key.")
+        return
+
+    with st.spinner("Billy Walters (AI) sta analizzando..."):
+        query = f"formazioni ufficiali infortunati {h} {a} 2026 sky sport"
         news = ""
         try:
             with DDGS() as ddgs:
                 for r in ddgs.text(query, max_results=5): news += f" {r['body']}"
-        except: news = "News web non raggiungibili."
+        except: news = "News non disponibili."
         
-        prompt = f"""SEI BILLY WALTERS. RISPONDI IN ITALIANO.
+        prompt = f"""Sei Billy Walters, analista tecnico. RISPONDI IN ITALIANO.
         Analizza {h} vs {a}. AI Poisson: 1({m['1']:.0%}), X({m['X']:.0%}), 2({m['2']:.0%}).
-        News: {news}. 
-        1. Analisi Formazioni e Meteo (3 righe). 
-        2. PRONOSTICO MASTER: [Indica la giocata migliore tra 1X2, GG/NG o Over]. 
-        3. PROB: [Numero intero probabilità finale].
-        NON USARE ASTERISCHI."""
+        News: {news}.
+        REGOLE: 1. Analisi formazioni (3 righe). 2. PRONOSTICO MASTER. 3. PROB PERCENTUALE."""
         
         try:
             response = gemini_model.generate_content(prompt)
-            st.markdown(f"<div style='line-height:1.2; font-size:16px;'>{response.text}</div>", unsafe_allow_html=True)
+            st.markdown(f"<div style='line-height:1.2; font-size:16px;'>{response.text.replace('*','')}</div>", unsafe_allow_html=True)
         except Exception as e:
-            st.error(f"Errore AI: {e}")
+            st.error(f"Errore Billy: {e}")
 
 # --- UI PRINCIPALE ---
 st.markdown('<div class="maradona-header"><h1>M4 STRATEGIC TERMINAL</h1><p>Powered by Billy Walters AI</p></div>', unsafe_allow_html=True)
 
-# Top Cards
-col_m1, col_m2, col_m3, col_m4 = st.columns(4)
-with col_m1: st.markdown(f'<div class="metric-card"><span class="metric-label">Match Caricati</span><span class="metric-value">20</span></div>', unsafe_allow_html=True)
-with col_m2: st.markdown(f'<div class="metric-card"><span class="metric-label">Value Trovati</span><span class="metric-value">5</span></div>', unsafe_allow_html=True)
-with col_m3: st.markdown(f'<div class="metric-card"><span class="metric-label">Best Edge</span><span class="metric-value">+15.4%</span></div>', unsafe_allow_html=True)
-with col_m4: st.markdown(f'<div class="metric-card"><span class="metric-label">Avg GG %</span><span class="metric-value">52%</span></div>', unsafe_allow_html=True)
-
-# Sidebar
 with st.sidebar:
-    st.title("🎩 Billy Chat")
+    st.title("🎩 Billy Walters Chat")
     camp_sel = st.selectbox("CAMPIONATO", ["Serie A", "Premier League", "La Liga", "Bundesliga"])
     if st.button("🔄 SINCRONIZZA TURNO"):
         l_map = {"Serie A": "SA", "Premier League": "PL", "La Liga": "PD", "Bundesliga": "BL1"}
-        url_p = f"https://api.football-data.org/v4/competitions/{l_map[camp_sel]}/matches?status=SCHEDULED"
-        st.session_state.live_data = requests.get(url_p, headers={'X-Auth-Token': API_KEY_DATA}).json().get('matches', [])
-    
+        st.session_state.live_data = requests.get(f"https://api.football-data.org/v4/competitions/{l_map[camp_sel]}/matches?status=SCHEDULED", headers={'X-Auth-Token': API_KEY_DATA}).json().get('matches', [])
     if "live_data" in st.session_state and st.session_state.live_data:
         giornate = sorted(list(set([m['matchday'] for m in st.session_state.live_data])))
         g_sel = st.selectbox("FILTRA PER GIORNATA", giornate)
@@ -190,3 +169,5 @@ if 'live_data' in st.session_state and engine:
             with c6:
                 st.write("<br>", unsafe_allow_html=True); st.button("🔍", key=f"ex_{idx}", on_click=show_details, args=(h_api, a_api, m))
             st.markdown("</div>", unsafe_allow_html=True)
+else:
+    st.info("👋 Terminale Pronto. Sincronizza per caricare la giornata.")
