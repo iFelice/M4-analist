@@ -5,20 +5,19 @@ import os, requests, glob, re
 from scipy.stats import poisson
 from datetime import datetime, timedelta
 from duckduckgo_search import DDGS
-import google.generativeai as genai
+from groq import Groq
 from scraper_xg import get_understat_xg, get_market_values
 
 # --- CONFIGURAZIONE CHIAVI (CLOUD SECRETS) ---
-GEMINI_API_KEY = st.secrets.get("GEMINI_API_KEY", "")
+GROQ_API_KEY = st.secrets.get("GROQ_API_KEY", "")
 API_KEY_ODDS = "a310fd7b74f24f2736a57c6caf768118"
 API_KEY_DATA = "c299e4a676a54d48a642f20bca7f4480"
 
 # Inizializzazione AI
 try:
-    genai.configure(api_key=GEMINI_API_KEY)
-    gemini_model = genai.GenerativeModel('gemini-2.0-flash')
+    groq_client = Groq(api_key=GROQ_API_KEY) if GROQ_API_KEY else None
 except Exception as e:
-    gemini_model = None
+    groq_client = None
 
 st.set_page_config(page_title="M4 STRATEGIC TERMINAL", layout="wide", initial_sidebar_state="expanded")
 
@@ -99,8 +98,8 @@ def get_full_poisson(h_e, a_e):
 # --- POPUP AI ---
 @st.dialog("STRATEGIC ANALYSIS", width="large")
 def show_details(h, a, m):
-    if not gemini_model:
-        st.error("Billy non è configurato correttamente.")
+    if not groq_client:
+        st.error("Billy non e' configurato correttamente. Aggiungi GROQ_API_KEY nei secrets.")
         return
     with st.spinner("Billy Walters sta analizzando..."):
         query = f"formazioni ufficiali infortunati meteo {h} {a} 2026 sky sport"
@@ -111,13 +110,18 @@ def show_details(h, a, m):
         except:
             news = "Nessuna news web disponibile."
         prompt = f"""Sei Billy Walters. RISPONDI SOLO IN ITALIANO.
-        Analizza {h} vs {a}. AI Poisson: 1({m['1']:.0%}), X({m['X']:.0%}), 2({m['2']:.0%}), O2.5({1-m['u25']:.0%}).
+        Analizza {h} vs {a}. AI Poisson: 1({m['1']:.0%}), X({m['X']:.0%}), 2({m['2']:.0%}), O2.5({{1-m['u25']:.0%}}).
         News: {news}. REGOLE: 1. Analisi formazioni (3 righe). 2. PRONOSTICO MASTER. 3. PROB PERCENTUALE."""
         try:
-            res = gemini_model.generate_content(prompt)
-            st.markdown(f"<div style='line-height:1.2; font-size:16px; color:white;'>{res.text.replace('*','')}</div>", unsafe_allow_html=True)
+            res = groq_client.chat.completions.create(
+                model="llama-3.3-70b-versatile",
+                messages=[{"role": "user", "content": prompt}],
+                max_tokens=500
+            )
+            testo = res.choices[0].message.content.replace("*", "")
+            st.markdown(f"<div style='line-height:1.2; font-size:16px; color:white;'>{testo}</div>", unsafe_allow_html=True)
         except Exception as e:
-            st.error(f"Errore AI: Il server Google ha risposto con un errore. Riprova tra poco. Dettaglio: {e}")
+            st.error(f"Errore AI: {e}")
 
 # --- UI PRINCIPALE ---
 st.markdown('<div class="maradona-header"><h1>M4 STRATEGIC TERMINAL</h1><p>Intelligence Evolution v28.1</p></div>', unsafe_allow_html=True)
