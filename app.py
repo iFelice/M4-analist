@@ -9,7 +9,7 @@ import google.generativeai as genai
 from scraper_xg import get_understat_xg, get_market_values
 
 # --- CONFIGURAZIONE CHIAVI (CLOUD SECRETS) ---
-GEMINI_API_KEY = st.secrets.get("GEMINI_API_KEY", "AIzaSyBQ-dVFpVLuOYak_qff-YG8kSb1Vpwcj3I")
+GEMINI_API_KEY = st.secrets.get("GEMINI_API_KEY", "")
 API_KEY_ODDS = "a310fd7b74f24f2736a57c6caf768118"
 API_KEY_DATA = "c299e4a676a54d48a642f20bca7f4480"
 
