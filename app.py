@@ -214,4 +214,4 @@ if 'live_data' in st.session_state and engine and g_sel is not None:
                 st.button("🔍", key=f"ex_{idx}", on_click=show_details, args=(h_api, a_api, m))
             st.markdown("</div>", unsafe_allow_html=True)
 else:
-st.info(“👋 Terminale Pronto. Sincronizza per caricare la giornata.”)
+st.info("👋 Terminale Pronto. Sincronizza per caricare la giornata.")
