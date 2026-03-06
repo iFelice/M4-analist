@@ -110,7 +110,7 @@ def show_details(h, a, m):
         except:
             news = "Nessuna news web disponibile."
         prompt = f"""Sei Billy Walters. RISPONDI SOLO IN ITALIANO.
-        Analizza {h} vs {a}. AI Poisson: 1({m['1']:.0%}), X({m['X']:.0%}), 2({m['2']:.0%}), O2.5({{1-m['u25']:.0%}}).
+        Analizza {h} vs {a}. AI Poisson: 1({m['1']:.0%}), X({m['X']:.0%}), 2({m['2']:.0%}), O2.5({1-m['u25']:.0%}).
         News: {news}. REGOLE: 1. Analisi formazioni (3 righe). 2. PRONOSTICO MASTER. 3. PROB PERCENTUALE."""
         try:
             res = groq_client.chat.completions.create(
@@ -119,7 +119,7 @@ def show_details(h, a, m):
                 max_tokens=500
             )
             testo = res.choices[0].message.content.replace("*", "")
-            st.markdown(f"<div style='line-height:1.2; font-size:16px; color:white;'>{testo}</div>", unsafe_allow_html=True)
+            st.markdown(f"<div style='line-height:1.2; font-size:16px; color:#1a1a1a;'>{testo}</div>", unsafe_allow_html=True)
         except Exception as e:
             st.error(f"Errore AI: {e}")
 
