@@ -3,7 +3,7 @@ pandas
 requests
 numpy
 scipy
-google-generativeai==0.8.3
+groq
 duckduckgo_search
 beautifulsoup4
 lxml
