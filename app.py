@@ -16,7 +16,7 @@ API_KEY_DATA = "c299e4a676a54d48a642f20bca7f4480"
 # Inizializzazione AI
 try:
     genai.configure(api_key=GEMINI_API_KEY)
-    gemini_model = genai.GenerativeModel('gemini-1.5-flash')
+    gemini_model = genai.GenerativeModel('gemini-2.0-flash')
 except Exception as e:
     gemini_model = None
 
