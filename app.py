@@ -117,7 +117,7 @@ def get_ultimi_risultati(team_id, n=5):
         r = requests.get(
             "https://v3.football.api-sports.io/fixtures",
             headers={"x-apisports-key": API_FOOTBALL_KEY},
-            params={"team": team_id, "last": n, "status": "FT"}
+            params={"team": team_id, "last": n, "status": "FT", "season": 2025}
         )
         risultati = []
         for f in r.json().get("response", []):
@@ -142,7 +142,7 @@ def get_infortunati(team_id, league_id):
         r = requests.get(
             "https://v3.football.api-sports.io/injuries",
             headers={"x-apisports-key": API_FOOTBALL_KEY},
-            params={"team": team_id, "league": league_id, "season": 2024}
+            params={"team": team_id, "league": league_id, "season": 2025}
         )
         infortunati = []
         for p in r.json().get("response", [])[:8]:
