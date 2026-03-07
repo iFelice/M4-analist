@@ -177,6 +177,17 @@ IMPORTANTE: Non inventare risultati o nomi di giocatori se non li trovi nelle ne
                     html += f"<div style='margin-top:16px; margin-bottom:4px; font-size:13px; font-weight:900; text-transform:uppercase; color:#3b82f6; letter-spacing:1px;'>{riga_strip}</div>"
                 elif riga_strip:
                     html += f"<div style='font-size:15px; line-height:1.6; color:#1a1a1a; margin-bottom:4px;'>{riga_strip}</div>"
+            # CSS per forzare popup bianco
+            st.markdown("""<style>
+            div[data-testid="stDialog"] > div > div {
+                background-color: #ffffff !important;
+                color: #1a1a1a !important;
+            }
+            div[data-testid="stDialog"] p,
+            div[data-testid="stDialog"] div {
+                color: #1a1a1a !important;
+            }
+            </style>""", unsafe_allow_html=True)
             st.markdown(html, unsafe_allow_html=True)
         except Exception as e:
             st.error(f"Errore AI: {e}")
