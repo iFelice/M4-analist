@@ -8,290 +8,272 @@ from duckduckgo_search import DDGS
 from groq import Groq
 from scraper_xg import get_understat_xg, get_market_values
 
-# — CONFIGURAZIONE CHIAVI (CLOUD SECRETS) —
-
+# --- CONFIGURAZIONE CHIAVI (CLOUD SECRETS) ---
 GROQ_API_KEY = st.secrets.get("GROQ_API_KEY", "")
 API_KEY_ODDS = "a310fd7b74f24f2736a57c6caf768118"
 API_KEY_DATA = "c299e4a676a54d48a642f20bca7f4480"
 
 # Inizializzazione AI
-
 try:
-groq_client = Groq(api_key=GROQ_API_KEY) if GROQ_API_KEY else None
+    groq_client = Groq(api_key=GROQ_API_KEY) if GROQ_API_KEY else None
 except Exception as e:
-groq_client = None
+    groq_client = None
 
-st.set_page_config(page_title=“M4 STRATEGIC TERMINAL”, layout=“wide”, initial_sidebar_state=“expanded”)
+st.set_page_config(page_title="M4 STRATEGIC TERMINAL", layout="wide", initial_sidebar_state="expanded")
 
-# — GESTIONE TEMA —
-
-theme = st.sidebar.select_slider(“⚙️ TEMA”, options=[“LIGHT”, “DARK”], value=“DARK”)
-if theme == “DARK”:
-bg, card, txt, border, stat_bg, lbl = “#0b0e11”, “#161b22”, “#ffffff”, “#30363d”, “#0d1117”, “#58a6ff”
+# --- GESTIONE TEMA ---
+theme = st.sidebar.select_slider("⚙️ TEMA", options=["LIGHT", "DARK"], value="DARK")
+if theme == "DARK":
+    bg, card, txt, border, stat_bg, lbl = "#0b0e11", "#161b22", "#ffffff", "#30363d", "#0d1117", "#58a6ff"
 else:
-bg, card, txt, border, stat_bg, lbl = “#f0f2f5”, “#ffffff”, “#1a1d23”, “#e0e4e9”, “#f8f9fa”, “#0056b3”
+    bg, card, txt, border, stat_bg, lbl = "#f0f2f5", "#ffffff", "#1a1d23", "#e0e4e9", "#f8f9fa", "#0056b3"
 
-# — CSS —
+# --- CSS ---
+st.markdown(f"""
+    <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&display=swap');
+    html, body, [data-testid="stapp"] {{ background-color: {bg} !important; color: {txt} !important; font-family: 'Inter', sans-serif; }}
+    .stApp {{ background-color: {bg}; }}
+    .maradona-header {{
+        background: linear-gradient(rgba(0, 45, 91, 0.8), rgba(0, 45, 91, 0.8)), 
+                    url('https://images.unsplash.com/photo-1574629810360-7efbbe195018?auto=format&fit=crop&w=1600&q=80');
+        background-size: cover; background-position: center; padding: 40px;
+        border-radius: 0 0 20px 20px; text-align: center; margin: -60px -60px 30px -60px; color: white;
+    }}
+    .match-card {{ background-color: {card}; border-radius: 12px; padding: 25px; margin-bottom: 8px; border: 1px solid {border}; box-shadow: 0 2px 8px rgba(0,0,0,0.05); }}
+    .team-name {{ font-size: 19px; font-weight: 800; color: #58a6ff; text-transform: uppercase; }}
+    .label-header {{ color: {lbl}; font-size: 15px !important; font-weight: 900; text-transform: uppercase; display: block; margin-bottom: 5px; border-bottom: 1px solid {border}; }}
+    .match-date {{ font-size: 15px !important; color: #3b82f6 !important; font-weight: 700; display: block; margin-top: 5px; }}
+    .stat-container {{ background-color: {stat_bg}; border: 1px solid {border}; border-radius: 8px; padding: 10px; text-align: center; height: 100%; }}
+    .val-sign {{ color: {txt} !important; font-weight: 800; font-size: 13px; margin-bottom: 2px; }}
+    .val-p-green {{ color: #28a745; font-size: 17px; font-weight: 800; }}
+    .val-p-red {{ color: #dc3545; font-size: 17px; font-weight: 800; }}
+    .val-q {{ color: #856404; font-size: 14px; font-weight: 700; display: block; margin-top: 3px; font-family: monospace; }}
+    [data-testid="stVerticalBlock"] > div {{ gap: 0rem !important; }}
+    </style>
+    """, unsafe_allow_html=True)
 
-st.markdown(f”””
-<style>
-@import url(‘https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&display=swap’);
-html, body, [data-testid=“stapp”] {{ background-color: {bg} !important; color: {txt} !important; font-family: ‘Inter’, sans-serif; }}
-.stApp {{ background-color: {bg}; }}
-.maradona-header {{
-background: linear-gradient(rgba(0, 45, 91, 0.8), rgba(0, 45, 91, 0.8)),
-url(‘https://images.unsplash.com/photo-1574629810360-7efbbe195018?auto=format&fit=crop&w=1600&q=80’);
-background-size: cover; background-position: center; padding: 40px;
-border-radius: 0 0 20px 20px; text-align: center; margin: -60px -60px 30px -60px; color: white;
-}}
-.match-card {{ background-color: {card}; border-radius: 12px; padding: 25px; margin-bottom: 8px; border: 1px solid {border}; box-shadow: 0 2px 8px rgba(0,0,0,0.05); }}
-.team-name {{ font-size: 19px; font-weight: 800; color: #58a6ff; text-transform: uppercase; }}
-.label-header {{ color: {lbl}; font-size: 15px !important; font-weight: 900; text-transform: uppercase; display: block; margin-bottom: 5px; border-bottom: 1px solid {border}; }}
-.match-date {{ font-size: 15px !important; color: #3b82f6 !important; font-weight: 700; display: block; margin-top: 5px; }}
-.stat-container {{ background-color: {stat_bg}; border: 1px solid {border}; border-radius: 8px; padding: 10px; text-align: center; height: 100%; }}
-.val-sign {{ color: {txt} !important; font-weight: 800; font-size: 13px; margin-bottom: 2px; }}
-.val-p-green {{ color: #28a745; font-size: 17px; font-weight: 800; }}
-.val-p-red {{ color: #dc3545; font-size: 17px; font-weight: 800; }}
-.val-q {{ color: #856404; font-size: 14px; font-weight: 700; display: block; margin-top: 3px; font-family: monospace; }}
-[data-testid=“stVerticalBlock”] > div {{ gap: 0rem !important; }}
-</style>
-“””, unsafe_allow_html=True)
-
-# — MOTORE LOGICO —
-
+# --- MOTORE LOGICO ---
 def clean_name(name):
-n = str(name).strip()
-m = {“Manchester United”: “Man United”, “Manchester City”: “Man City”, “Tottenham Hotspur”: “Tottenham”,
-“Inter Milan”: “Inter”, “AC Milan”: “Milan”, “Atalanta BC”: “Atalanta”, “Hellas Verona”: “Verona”}
-n = m.get(n, n)
-for r in [“BC”, “FC”, “AC “, “AS “, “1907”, “Calcio”]: n = n.replace(r, “”)
-return n.strip()
+    n = str(name).strip()
+    m = {"Manchester United": "Man United", "Manchester City": "Man City", "Tottenham Hotspur": "Tottenham",
+         "Inter Milan": "Inter", "AC Milan": "Milan", "Atalanta BC": "Atalanta", "Hellas Verona": "Verona"}
+    n = m.get(n, n)
+    for r in ["BC", "FC", "AC ", "AS ", "1907", "Calcio"]: n = n.replace(r, "")
+    return n.strip()
 
 @st.cache_data
 def get_league_engine(camp_key):
-p = {“Serie A”: “SerieA*”, “Premier League”: “Premier*”, “La Liga”: “LaLiga*”, “Bundesliga”: “Bundesliga*”}
-files = glob.glob(f”./database/{p.get(camp_key)}”)
-if not files: return None
-df = pd.concat([pd.read_csv(f, on_bad_lines=‘skip’, low_memory=False) for f in files])
-df[‘Date’] = pd.to_datetime(df[‘Date’], dayfirst=True, errors=‘coerce’)
-df = df.dropna(subset=[‘HomeTeam’, ‘AwayTeam’, ‘FTR’]).sort_values(‘Date’)
-df[‘HomeClean’] = df[‘HomeTeam’].apply(clean_name)
-df[‘AwayClean’] = df[‘AwayTeam’].apply(clean_name)
-xg_data = get_understat_xg(camp_key)
-mkt_values = get_market_values()
-avg_h, avg_a = df[‘FTHG’].mean(), df[‘FTAG’].mean()
-stats = {}
-for t in pd.concat([df[‘HomeClean’], df[‘AwayClean’]]).unique():
-h_h, a_h = df[df[‘HomeClean’]==t], df[df[‘AwayClean’]==t]
-if xg_data and t in xg_data:
-att, defe = xg_data[t][‘xG_avg’], xg_data[t][‘xGA_avg’]
-else:
-att = ((h_h[‘FTHG’].mean()/avg_h)+(a_h[‘FTAG’].mean()/avg_a))/2 if not h_h.empty else 1.0
-defe = ((h_h[‘FTAG’].mean()/avg_a)+(a_h[‘FTHG’].mean()/avg_h))/2 if not a_h.empty else 1.0
-val = mkt_values.get(t, 50)
-stats[t] = {‘att’: att * (1 + (val/6000)), ‘def’: defe * (1 - (val/6000)), ‘val’: val}
-return stats, avg_h, avg_a, df
+    p = {"Serie A": "SerieA*", "Premier League": "Premier*", "La Liga": "LaLiga*", "Bundesliga": "Bundesliga*"}
+    files = glob.glob(f"./database/{p.get(camp_key)}")
+    if not files: return None
+    df = pd.concat([pd.read_csv(f, on_bad_lines='skip', low_memory=False) for f in files])
+    df['Date'] = pd.to_datetime(df['Date'], dayfirst=True, errors='coerce')
+    df = df.dropna(subset=['HomeTeam', 'AwayTeam', 'FTR']).sort_values('Date')
+    df['HomeClean'] = df['HomeTeam'].apply(clean_name)
+    df['AwayClean'] = df['AwayTeam'].apply(clean_name)
+    xg_data = get_understat_xg(camp_key)
+    mkt_values = get_market_values()
+    avg_h, avg_a = df['FTHG'].mean(), df['FTAG'].mean()
+    stats = {}
+    for t in pd.concat([df['HomeClean'], df['AwayClean']]).unique():
+        h_h, a_h = df[df['HomeClean']==t], df[df['AwayClean']==t]
+        if xg_data and t in xg_data:
+            att, defe = xg_data[t]['xG_avg'], xg_data[t]['xGA_avg']
+        else:
+            att = ((h_h['FTHG'].mean()/avg_h)+(a_h['FTAG'].mean()/avg_a))/2 if not h_h.empty else 1.0
+            defe = ((h_h['FTAG'].mean()/avg_a)+(a_h['FTHG'].mean()/avg_h))/2 if not a_h.empty else 1.0
+        val = mkt_values.get(t, 50)
+        stats[t] = {'att': att * (1 + (val/6000)), 'def': defe * (1 - (val/6000)), 'val': val}
+    return stats, avg_h, avg_a, df
 
 def get_full_poisson(h_e, a_e):
-h_p = [poisson.pmf(i, h_e) for i in range(8)]
-a_p = [poisson.pmf(i, a_e) for i in range(8)]
-matrix = np.outer(h_p, a_p)
-def get_u(limit): return sum([matrix[i,j] for i in range(8) for j in range(8) if i+j < limit])
-return {“1”: np.sum(np.tril(matrix, -1)), “X”: np.sum(np.diag(matrix)), “2”: np.sum(np.triu(matrix, 1)),
-“u15”: get_u(1.5), “u25”: get_u(2.5), “u35”: get_u(3.5), “gg”: (1-h_p[0])*(1-a_p[0])}
+    h_p = [poisson.pmf(i, h_e) for i in range(8)]
+    a_p = [poisson.pmf(i, a_e) for i in range(8)]
+    matrix = np.outer(h_p, a_p)
+    def get_u(limit): return sum([matrix[i,j] for i in range(8) for j in range(8) if i+j < limit])
+    return {"1": np.sum(np.tril(matrix, -1)), "X": np.sum(np.diag(matrix)), "2": np.sum(np.triu(matrix, 1)),
+            "u15": get_u(1.5), "u25": get_u(2.5), "u35": get_u(3.5), "gg": (1-h_p[0])*(1-a_p[0])}
 
-# — POPUP AI —
-
-@st.dialog(“STRATEGIC ANALYSIS”, width=“large”)
+# --- POPUP AI ---
+@st.dialog("STRATEGIC ANALYSIS", width="large")
 def show_details(h, a, m):
-if not groq_client:
-st.error(“Billy non e’ configurato correttamente. Aggiungi GROQ_API_KEY nei secrets.”)
-return
-with st.spinner(“Billy Walters sta analizzando…”):
-# Ricerca news mirata su piu’ query specifiche
-news = “”
-queries = [
-f”{h} {a} formazioni probabili infortunati 2026”,
-f”{h} ultime 5 partite risultati forma”,
-f”{a} ultime 5 partite risultati forma”,
-f”{h} {a} classifica serie a quote”
-]
-try:
-with DDGS() as ddgs:
-for q in queries:
-for r in ddgs.text(q, max_results=3):
-news += f” {r[‘body’]}”
-except:
-news = “Nessuna news web disponibile.”
+    if not groq_client:
+        st.error("Billy non e' configurato correttamente. Aggiungi GROQ_API_KEY nei secrets.")
+        return
+    with st.spinner("Billy Walters sta analizzando..."):
+        # Ricerca news mirata su piu' query specifiche
+        news = ""
+        queries = [
+            f"{h} {a} formazioni probabili infortunati 2026",
+            f"{h} ultime 5 partite risultati forma",
+            f"{a} ultime 5 partite risultati forma",
+            f"{h} {a} classifica serie a quote"
+        ]
+        try:
+            with DDGS() as ddgs:
+                for q in queries:
+                    for r in ddgs.text(q, max_results=3):
+                        news += f" {r['body']}"
+        except:
+            news = "Nessuna news web disponibile."
 
-```
-    p1 = m['1']
-    pX = m['X']
-    p2 = m['2']
-    po25 = 1 - m['u25']
-    po15 = 1 - m['u15']
-    pgg = m['gg']
+        p1 = m['1']
+        pX = m['X']
+        p2 = m['2']
+        po25 = 1 - m['u25']
+        po15 = 1 - m['u15']
+        pgg = m['gg']
 
-    prompt = f"""Sei Billy Walters, il leggendario analista sportivo. Devi analizzare {h} vs {a}.
-```
+        prompt = f"""Sei Billy Walters, il leggendario analista sportivo. Devi analizzare {h} vs {a}.
 
 HAI A DISPOSIZIONE QUESTI DATI STATISTICI (motore Poisson):
-
-- Probabilita’ vittoria {h}: {p1:.0%}
-- Probabilita’ pareggio: {pX:.0%}
-- Probabilita’ vittoria {a}: {p2:.0%}
+- Probabilita' vittoria {h}: {p1:.0%}
+- Probabilita' pareggio: {pX:.0%}
+- Probabilita' vittoria {a}: {p2:.0%}
 - Over 1.5: {po15:.0%} | Over 2.5: {po25:.0%}
 - Goal/Goal (entrambe segnano): {pgg:.0%}
 
 HAI A DISPOSIZIONE QUESTE NEWS E CONTESTO AGGIORNATO:
 {news}
 
-STRUTTURA LA TUA ANALISI ESATTAMENTE COSI’ (in italiano, tono deciso e analitico):
+STRUTTURA LA TUA ANALISI ESATTAMENTE COSI' (in italiano, tono deciso e analitico):
 
 STATO DI FORMA
 Descrivi il rendimento nelle ultime 5 gare di entrambe le squadre con risultati concreti se disponibili. Confronta posizione in classifica, punti e trend. Sii diretto nei confronti.
 
 ANALISI TATTICA
-Analizza i moduli, i punti di forza e debolezza di ciascuna squadra. Menziona gli infortunati o assenze rilevanti se presenti nelle news. Confronta gli xG (expected goals) e la solidita’ difensiva.
+Analizza i moduli, i punti di forza e debolezza di ciascuna squadra. Menziona gli infortunati o assenze rilevanti se presenti nelle news. Confronta gli xG (expected goals) e la solidita' difensiva.
 
 RAGIONAMENTO VERSO IL PRONOSTICO
 In modo discorsivo, spiega come i dati statistici e il contesto attuale ti portano alla tua conclusione. Usa i numeri del motore Poisson come supporto al ragionamento, non come unica fonte.
 
 PRONOSTICO SICURO
-Indica chiaramente la scommessa a basso rischio con motivazione in 2 righe. Esempio: “Over 1.5 - 89% di probabilita’”
+Indica chiaramente la scommessa a basso rischio con motivazione in 2 righe. Esempio: "Over 1.5 - 89% di probabilita'"
 
-PRONOSTICO ALLETTANTE (PIU’ RISCHIOSO)
-Indica una scommessa con piu’ valore potenziale ma maggiore rischio. Motiva in 2 righe.
+PRONOSTICO ALLETTANTE (PIU' RISCHIOSO)
+Indica una scommessa con piu' valore potenziale ma maggiore rischio. Motiva in 2 righe.
 
 LIVELLO DI CONFIDENZA COMPLESSIVO
-Esprimi un voto da 1 a 10 sulla solidita’ dell’analisi e spiega brevemente perche’.
+Esprimi un voto da 1 a 10 sulla solidita' dell'analisi e spiega brevemente perche'.
 
-IMPORTANTE: Non inventare risultati o nomi di giocatori se non li trovi nelle news. In quel caso dillo esplicitamente.”””
+IMPORTANTE: Non inventare risultati o nomi di giocatori se non li trovi nelle news. In quel caso dillo esplicitamente."""
 
-```
-    try:
-        res = groq_client.chat.completions.create(
-            model="llama-3.3-70b-versatile",
-            messages=[{"role": "user", "content": prompt}],
-            max_tokens=1200
-        )
-        testo = res.choices[0].message.content.replace("**", "").replace("*", "")
-        # Rendering con sezioni in evidenza
-        righe = testo.split("\n")
-        html = ""
-        sezioni = ["STATO DI FORMA", "ANALISI TATTICA", "RAGIONAMENTO VERSO IL PRONOSTICO",
-                   "PRONOSTICO SICURO", "PRONOSTICO ALLETTANTE", "LIVELLO DI CONFIDENZA"]
-        for riga in righe:
-            riga_strip = riga.strip()
-            if any(riga_strip.startswith(s) for s in sezioni):
-                html += f"<div style='margin-top:16px; margin-bottom:4px; font-size:13px; font-weight:900; text-transform:uppercase; color:#3b82f6; letter-spacing:1px;'>{riga_strip}</div>"
-            elif riga_strip:
-                html += f"<div style='font-size:15px; line-height:1.6; color:#1a1a1a; margin-bottom:4px;'>{riga_strip}</div>"
-        st.markdown(html, unsafe_allow_html=True)
-    except Exception as e:
-        st.error(f"Errore AI: {e}")
-```
+        try:
+            res = groq_client.chat.completions.create(
+                model="llama-3.3-70b-versatile",
+                messages=[{"role": "user", "content": prompt}],
+                max_tokens=1200
+            )
+            testo = res.choices[0].message.content.replace("**", "").replace("*", "")
+            # Rendering con sezioni in evidenza
+            righe = testo.split("\n")
+            html = ""
+            sezioni = ["STATO DI FORMA", "ANALISI TATTICA", "RAGIONAMENTO VERSO IL PRONOSTICO",
+                       "PRONOSTICO SICURO", "PRONOSTICO ALLETTANTE", "LIVELLO DI CONFIDENZA"]
+            for riga in righe:
+                riga_strip = riga.strip()
+                if any(riga_strip.startswith(s) for s in sezioni):
+                    html += f"<div style='margin-top:16px; margin-bottom:4px; font-size:13px; font-weight:900; text-transform:uppercase; color:#3b82f6; letter-spacing:1px;'>{riga_strip}</div>"
+                elif riga_strip:
+                    html += f"<div style='font-size:15px; line-height:1.6; color:#1a1a1a; margin-bottom:4px;'>{riga_strip}</div>"
+            st.markdown(html, unsafe_allow_html=True)
+        except Exception as e:
+            st.error(f"Errore AI: {e}")
 
-# — UI PRINCIPALE —
-
-st.markdown(’<div class="maradona-header"><h1>M4 STRATEGIC TERMINAL</h1><p>Intelligence Evolution v28.1</p></div>’, unsafe_allow_html=True)
+# --- UI PRINCIPALE ---
+st.markdown('<div class="maradona-header"><h1>M4 STRATEGIC TERMINAL</h1><p>Intelligence Evolution v28.1</p></div>', unsafe_allow_html=True)
 
 # Mapping odds sport key
-
 map_odds = {
-“Serie A”: “soccer_italy_serie_a”,
-“Premier League”: “soccer_epl”,
-“La Liga”: “soccer_spain_la_liga”,
-“Bundesliga”: “soccer_germany_bundesliga”
+    "Serie A": "soccer_italy_serie_a",
+    "Premier League": "soccer_epl",
+    "La Liga": "soccer_spain_la_liga",
+    "Bundesliga": "soccer_germany_bundesliga"
 }
 
 with st.sidebar:
-st.title(“🎩 Billy Walters Chat”)
-camp_sel = st.selectbox(“CAMPIONATO”, [“Serie A”, “Premier League”, “La Liga”, “Bundesliga”])
+    st.title("🎩 Billy Walters Chat")
+    camp_sel = st.selectbox("CAMPIONATO", ["Serie A", "Premier League", "La Liga", "Bundesliga"])
 
-```
-if st.button("🔄 SINCRONIZZA TURNO"):
-    l_map = {"Serie A": "SA", "Premier League": "PL", "La Liga": "PD", "Bundesliga": "BL1"}
-    try:
-        # FIX: status=TIMED+SCHEDULED per prendere tutte le partite imminenti
-        resp = requests.get(
-            f"https://api.football-data.org/v4/competitions/{l_map[camp_sel]}/matches?status=TIMED,SCHEDULED",
-            headers={'X-Auth-Token': API_KEY_DATA}
-        )
-        st.session_state.live_data = resp.json().get('matches', [])
-        st.session_state.live_camp = camp_sel  # salva il campionato attivo
+    if st.button("🔄 SINCRONIZZA TURNO"):
+        l_map = {"Serie A": "SA", "Premier League": "PL", "La Liga": "PD", "Bundesliga": "BL1"}
+        try:
+            # FIX: status=TIMED+SCHEDULED per prendere tutte le partite imminenti
+            resp = requests.get(
+                f"https://api.football-data.org/v4/competitions/{l_map[camp_sel]}/matches?status=TIMED,SCHEDULED",
+                headers={'X-Auth-Token': API_KEY_DATA}
+            )
+            st.session_state.live_data = resp.json().get('matches', [])
+            st.session_state.live_camp = camp_sel  # salva il campionato attivo
 
-        # FIX: usa il mapping corretto per le odds
-        sport_key = map_odds[camp_sel]
-        url_q = f"https://api.the-odds-api.com/v4/sports/{sport_key}/odds/?apiKey={API_KEY_ODDS}&regions=eu&markets=h2h"
-        odds_resp = requests.get(url_q)
-        data = odds_resp.json()
-        st.session_state.live_odds = data if isinstance(data, list) else []
-    except Exception as e:
-        st.sidebar.error(f"Errore sincronizzazione: {e}")
+            # FIX: usa il mapping corretto per le odds
+            sport_key = map_odds[camp_sel]
+            url_q = f"https://api.the-odds-api.com/v4/sports/{sport_key}/odds/?apiKey={API_KEY_ODDS}&regions=eu&markets=h2h"
+            odds_resp = requests.get(url_q)
+            data = odds_resp.json()
+            st.session_state.live_odds = data if isinstance(data, list) else []
+        except Exception as e:
+            st.sidebar.error(f"Errore sincronizzazione: {e}")
 
-if "live_data" in st.session_state and st.session_state.live_data:
-    giornate = sorted(list(set([m['matchday'] for m in st.session_state.live_data])))
-    g_sel = st.selectbox("GIORNATA", giornate)
-else:
-    g_sel = None
-```
+    if "live_data" in st.session_state and st.session_state.live_data:
+        giornate = sorted(list(set([m['matchday'] for m in st.session_state.live_data])))
+        g_sel = st.selectbox("GIORNATA", giornate)
+    else:
+        g_sel = None
 
 engine = get_league_engine(camp_sel)
 
-if ‘live_data’ in st.session_state and engine and g_sel is not None:
-team_stats, avg_h, avg_a, df_full = engine
-matches = [m for m in st.session_state.live_data if m[‘matchday’] == g_sel]
-st.subheader(f”🏟️ {camp_sel.upper()} - GIORNATA {g_sel}”)
+if 'live_data' in st.session_state and engine and g_sel is not None:
+    team_stats, avg_h, avg_a, df_full = engine
+    matches = [m for m in st.session_state.live_data if m['matchday'] == g_sel]
+    st.subheader(f"🏟️ {camp_sel.upper()} - GIORNATA {g_sel}")
 
-```
-for idx, match in enumerate(matches):
-    h_api = match['homeTeam'].get('shortName') or match['homeTeam'].get('name', '?')
-    a_api = match['awayTeam'].get('shortName') or match['awayTeam'].get('name', '?')
-    h_cl, a_cl = clean_name(h_api), clean_name(a_api)
-    dt = (datetime.strptime(match['utcDate'], "%Y-%m-%dT%H:%M:%SZ") + timedelta(hours=1)).strftime("%d/%m | %H:%M")
+    for idx, match in enumerate(matches):
+        h_api = match['homeTeam'].get('shortName') or match['homeTeam'].get('name', '?')
+        a_api = match['awayTeam'].get('shortName') or match['awayTeam'].get('name', '?')
+        h_cl, a_cl = clean_name(h_api), clean_name(a_api)
+        dt = (datetime.strptime(match['utcDate'], "%Y-%m-%dT%H:%M:%SZ") + timedelta(hours=1)).strftime("%d/%m | %H:%M")
 
-    q1, qX, q2 = 1.0, 1.0, 1.0
-    if 'live_odds' in st.session_state and isinstance(st.session_state.live_odds, list):
-        for mo in st.session_state.live_odds:
-            if h_cl in clean_name(mo.get('home_team', '')):
-                try:
-                    odds = {o['name']: o['price'] for o in mo['bookmakers'][0]['markets'][0]['outcomes']}
-                    q1 = odds.get(mo['home_team'], 1.0)
-                    qX = odds.get('Draw', odds.get('Tie', 1.0))
-                    q2 = odds.get(mo['away_team'], 1.0)
-                except:
-                    pass
+        q1, qX, q2 = 1.0, 1.0, 1.0
+        if 'live_odds' in st.session_state and isinstance(st.session_state.live_odds, list):
+            for mo in st.session_state.live_odds:
+                if h_cl in clean_name(mo.get('home_team', '')):
+                    try:
+                        odds = {o['name']: o['price'] for o in mo['bookmakers'][0]['markets'][0]['outcomes']}
+                        q1 = odds.get(mo['home_team'], 1.0)
+                        qX = odds.get('Draw', odds.get('Tie', 1.0))
+                        q2 = odds.get(mo['away_team'], 1.0)
+                    except:
+                        pass
 
-    h_s = team_stats.get(h_cl, {'att': 0.85, 'def': 1.15})
-    a_s = team_stats.get(a_cl, {'att': 0.85, 'def': 1.15})
-    m = get_full_poisson(h_s['att'] * a_s['def'] * avg_h, a_s['att'] * h_s['def'] * avg_a)
+        h_s = team_stats.get(h_cl, {'att': 0.85, 'def': 1.15})
+        a_s = team_stats.get(a_cl, {'att': 0.85, 'def': 1.15})
+        m = get_full_poisson(h_s['att'] * a_s['def'] * avg_h, a_s['att'] * h_s['def'] * avg_a)
 
-    with st.container():
-        st.markdown('<div class="match-card">', unsafe_allow_html=True)
-        c_h, c1, c2, c3, c4, c5, c6 = st.columns([1.5, 1.2, 0.8, 0.8, 0.8, 1, 0.4])
-        with c_h:
-            st.markdown(f"<span class='team-name'>{h_api}<br>{a_api}</span><br><span class='match-date'>🕒 {dt}</span>", unsafe_allow_html=True)
-        with c1:
-            st.markdown(f"""<div class='stat-container'><span class='label-header'>Esito 1X2</span>
-            <div style='display:flex; justify-content:space-around'>
-                <div><span class='val-sign'>1</span><br><span class='val-p-green'>{m['1']:.0%}</span><br><span class='val-q'>{q1}</span></div>
-                <div><span class='val-sign'>X</span><br><span class='val-p-green'>{m['X']:.0%}</span><br><span class='val-q'>{qX}</span></div>
-                <div><span class='val-sign'>2</span><br><span class='val-p-green'>{m['2']:.0%}</span><br><span class='val-q'>{q2}</span></div>
-            </div></div>""", unsafe_allow_html=True)
-        with c2:
-            st.markdown(f"<div class='stat-container'><span class='label-header'>U/O 1.5</span><span class='val-p-red'>{m['u15']:.0%}</span> / <span class='val-p-green'>{(1-m['u15']):.0%}</span></div>", unsafe_allow_html=True)
-        with c3:
-            st.markdown(f"<div class='stat-container'><span class='label-header'>U/O 2.5</span><span class='val-p-red'>{m['u25']:.0%}</span> / <span class='val-p-green'>{(1-m['u25']):.0%}</span></div>", unsafe_allow_html=True)
-        with c4:
-            st.markdown(f"<div class='stat-container'><span class='label-header'>U/O 3.5</span><span class='val-p-red'>{m['u35']:.0%}</span> / <span class='val-p-green'>{(1-m['u35']):.0%}</span></div>", unsafe_allow_html=True)
-        with c5:
-            st.markdown(f"<div class='stat-container'><span class='label-header'>GG / NG</span><span class='val-p-green'>{m['gg']:.0%}</span> / <span class='val-p-red'>{(1-m['gg']):.0%}</span></div>", unsafe_allow_html=True)
-        with c6:
-            st.write("<br>", unsafe_allow_html=True)
-            st.button("🔍", key=f"ex_{idx}", on_click=show_details, args=(h_api, a_api, m))
-        st.markdown("</div>", unsafe_allow_html=True)
-```
-
+        with st.container():
+            st.markdown('<div class="match-card">', unsafe_allow_html=True)
+            c_h, c1, c2, c3, c4, c5, c6 = st.columns([1.5, 1.2, 0.8, 0.8, 0.8, 1, 0.4])
+            with c_h:
+                st.markdown(f"<span class='team-name'>{h_api}<br>{a_api}</span><br><span class='match-date'>🕒 {dt}</span>", unsafe_allow_html=True)
+            with c1:
+                st.markdown(f"""<div class='stat-container'><span class='label-header'>Esito 1X2</span>
+                <div style='display:flex; justify-content:space-around'>
+                    <div><span class='val-sign'>1</span><br><span class='val-p-green'>{m['1']:.0%}</span><br><span class='val-q'>{q1}</span></div>
+                    <div><span class='val-sign'>X</span><br><span class='val-p-green'>{m['X']:.0%}</span><br><span class='val-q'>{qX}</span></div>
+                    <div><span class='val-sign'>2</span><br><span class='val-p-green'>{m['2']:.0%}</span><br><span class='val-q'>{q2}</span></div>
+                </div></div>""", unsafe_allow_html=True)
+            with c2:
+                st.markdown(f"<div class='stat-container'><span class='label-header'>U/O 1.5</span><span class='val-p-red'>{m['u15']:.0%}</span> / <span class='val-p-green'>{(1-m['u15']):.0%}</span></div>", unsafe_allow_html=True)
+            with c3:
+                st.markdown(f"<div class='stat-container'><span class='label-header'>U/O 2.5</span><span class='val-p-red'>{m['u25']:.0%}</span> / <span class='val-p-green'>{(1-m['u25']):.0%}</span></div>", unsafe_allow_html=True)
+            with c4:
+                st.markdown(f"<div class='stat-container'><span class='label-header'>U/O 3.5</span><span class='val-p-red'>{m['u35']:.0%}</span> / <span class='val-p-green'>{(1-m['u35']):.0%}</span></div>", unsafe_allow_html=True)
+            with c5:
+                st.markdown(f"<div class='stat-container'><span class='label-header'>GG / NG</span><span class='val-p-green'>{m['gg']:.0%}</span> / <span class='val-p-red'>{(1-m['gg']):.0%}</span></div>", unsafe_allow_html=True)
+            with c6:
+                st.write("<br>", unsafe_allow_html=True)
+                st.button("🔍", key=f"ex_{idx}", on_click=show_details, args=(h_api, a_api, m))
+            st.markdown("</div>", unsafe_allow_html=True)
 else:
-st.info("👋 Terminale Pronto. Sincronizza per caricare la giornata.")
+    st.info("👋 Terminale Pronto. Sincronizza per caricare la giornata.")
