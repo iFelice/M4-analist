@@ -10,6 +10,7 @@ from scraper_xg import get_understat_xg, get_market_values
 
 # --- CONFIGURAZIONE CHIAVI (CLOUD SECRETS) ---
 GROQ_API_KEY = st.secrets.get("GROQ_API_KEY", "")
+API_FOOTBALL_KEY = st.secrets.get("API_FOOTBALL_KEY", "")
 API_KEY_ODDS = "a310fd7b74f24f2736a57c6caf768118"
 API_KEY_DATA = "c299e4a676a54d48a642f20bca7f4480"
 
@@ -95,28 +96,103 @@ def get_full_poisson(h_e, a_e):
     return {"1": np.sum(np.tril(matrix, -1)), "X": np.sum(np.diag(matrix)), "2": np.sum(np.triu(matrix, 1)),
             "u15": get_u(1.5), "u25": get_u(2.5), "u35": get_u(3.5), "gg": (1-h_p[0])*(1-a_p[0])}
 
+
+# --- DATI CONTESTUALI DA API-FOOTBALL ---
+def get_team_id(team_name, league_id):
+    """Cerca l'ID squadra su API-Football"""
+    try:
+        r = requests.get(
+            "https://v3.football.api-sports.io/teams",
+            headers={"x-apisports-key": API_FOOTBALL_KEY},
+            params={"search": team_name, "league": league_id, "season": 2024}
+        )
+        data = r.json().get("response", [])
+        return data[0]["team"]["id"] if data else None
+    except:
+        return None
+
+def get_ultimi_risultati(team_id, n=5):
+    """Ultime N partite giocate"""
+    try:
+        r = requests.get(
+            "https://v3.football.api-sports.io/fixtures",
+            headers={"x-apisports-key": API_FOOTBALL_KEY},
+            params={"team": team_id, "last": n, "status": "FT"}
+        )
+        risultati = []
+        for f in r.json().get("response", []):
+            home = f["teams"]["home"]["name"]
+            away = f["teams"]["away"]["name"]
+            gh = f["goals"]["home"]
+            ga = f["goals"]["away"]
+            winner = f["teams"]["home"]["winner"]
+            if f["teams"]["home"]["id"] == team_id:
+                esito = "V" if winner else ("P" if winner is False else "X")
+                risultati.append(f"{home} {gh}-{ga} {away} ({esito})")
+            else:
+                esito = "V" if winner is False else ("P" if winner else "X")
+                risultati.append(f"{home} {gh}-{ga} {away} ({esito})")
+        return risultati
+    except:
+        return []
+
+def get_infortunati(team_id, league_id):
+    """Infortunati e squalificati"""
+    try:
+        r = requests.get(
+            "https://v3.football.api-sports.io/injuries",
+            headers={"x-apisports-key": API_FOOTBALL_KEY},
+            params={"team": team_id, "league": league_id, "season": 2024}
+        )
+        infortunati = []
+        for p in r.json().get("response", [])[:8]:
+            nome = p["player"]["name"]
+            tipo = p["player"]["type"]
+            infortunati.append(f"{nome} ({tipo})")
+        return infortunati
+    except:
+        return []
+
+def get_contesto_partita(h, a, camp_sel):
+    """Recupera tutto il contesto per la partita"""
+    league_map = {"Serie A": 135, "Premier League": 39, "La Liga": 140, "Bundesliga": 78}
+    league_id = league_map.get(camp_sel, 135)
+
+    if not API_FOOTBALL_KEY:
+        return None
+
+    h_id = get_team_id(h, league_id)
+    a_id = get_team_id(a, league_id)
+
+    contesto = {"h_risultati": [], "a_risultati": [], "h_infortunati": [], "a_infortunati": []}
+
+    if h_id:
+        contesto["h_risultati"] = get_ultimi_risultati(h_id)
+        contesto["h_infortunati"] = get_infortunati(h_id, league_id)
+    if a_id:
+        contesto["a_risultati"] = get_ultimi_risultati(a_id)
+        contesto["a_infortunati"] = get_infortunati(a_id, league_id)
+
+    return contesto
+
 # --- POPUP AI ---
 @st.dialog("STRATEGIC ANALYSIS", width="large")
-def show_details(h, a, m):
+def show_details(h, a, m, camp_sel="Serie A"):
     if not groq_client:
         st.error("Billy non e' configurato correttamente. Aggiungi GROQ_API_KEY nei secrets.")
         return
     with st.spinner("Billy Walters sta analizzando..."):
-        # Ricerca news mirata su piu' query specifiche
-        news = ""
-        queries = [
-            f"{h} {a} formazioni probabili infortunati 2026",
-            f"{h} ultime 5 partite risultati forma",
-            f"{a} ultime 5 partite risultati forma",
-            f"{h} {a} classifica serie a quote"
-        ]
+        # Dati strutturati da API-Football
+        contesto = get_contesto_partita(h, a, camp_sel)
+
+        # Fallback DuckDuckGo solo se API-Football non disponibile
+        news_extra = ""
         try:
             with DDGS() as ddgs:
-                for q in queries:
-                    for r in ddgs.text(q, max_results=3):
-                        news += f" {r['body']}"
+                for r in ddgs.text(f"{h} {a} probabili formazioni 2026", max_results=3):
+                    news_extra += f" {r['body']}"
         except:
-            news = "Nessuna news web disponibile."
+            news_extra = ""
 
         p1 = m['1']
         pX = m['X']
@@ -125,39 +201,53 @@ def show_details(h, a, m):
         po15 = 1 - m['u15']
         pgg = m['gg']
 
+        # Costruisci sezione dati strutturati
+        if contesto:
+            h_ris = ", ".join(contesto["h_risultati"]) if contesto["h_risultati"] else "Non disponibili"
+            a_ris = ", ".join(contesto["a_risultati"]) if contesto["a_risultati"] else "Non disponibili"
+            h_inf = ", ".join(contesto["h_infortunati"]) if contesto["h_infortunati"] else "Nessuno rilevato"
+            a_inf = ", ".join(contesto["a_infortunati"]) if contesto["a_infortunati"] else "Nessuno rilevato"
+            dati_reali = f"""
+DATI REALI AGGIORNATI:
+- Ultime 5 partite {h}: {h_ris}
+- Ultime 5 partite {a}: {a_ris}
+- Indisponibili {h}: {h_inf}
+- Indisponibili {a}: {a_inf}"""
+        else:
+            dati_reali = f"CONTESTO WEB: {news_extra}"
+
         prompt = f"""Sei Billy Walters, il leggendario analista sportivo. Devi analizzare {h} vs {a}.
 
-HAI A DISPOSIZIONE QUESTI DATI STATISTICI (motore Poisson):
+DATI STATISTICI (motore Poisson):
 - Probabilita' vittoria {h}: {p1:.0%}
 - Probabilita' pareggio: {pX:.0%}
 - Probabilita' vittoria {a}: {p2:.0%}
 - Over 1.5: {po15:.0%} | Over 2.5: {po25:.0%}
 - Goal/Goal (entrambe segnano): {pgg:.0%}
 
-HAI A DISPOSIZIONE QUESTE NEWS E CONTESTO AGGIORNATO:
-{news}
+{dati_reali}
 
 STRUTTURA LA TUA ANALISI ESATTAMENTE COSI' (in italiano, tono deciso e analitico):
 
 STATO DI FORMA
-Descrivi il rendimento nelle ultime 5 gare di entrambe le squadre con risultati concreti se disponibili. Confronta posizione in classifica, punti e trend. Sii diretto nei confronti.
+Analizza i risultati reali delle ultime 5 partite di entrambe le squadre. Commenta vittorie, pareggi, sconfitte e il trend attuale. Confronta posizione in classifica e punti se disponibili.
 
 ANALISI TATTICA
-Analizza i moduli, i punti di forza e debolezza di ciascuna squadra. Menziona gli infortunati o assenze rilevanti se presenti nelle news. Confronta gli xG (expected goals) e la solidita' difensiva.
+Analizza punti di forza e debolezza di ciascuna squadra. Commenta gli indisponibili e il loro impatto sul match. Confronta xG e solidita' difensiva basandoti sui dati Poisson.
 
 RAGIONAMENTO VERSO IL PRONOSTICO
-In modo discorsivo, spiega come i dati statistici e il contesto attuale ti portano alla tua conclusione. Usa i numeri del motore Poisson come supporto al ragionamento, non come unica fonte.
+In modo discorsivo, spiega come i dati reali e le statistiche ti portano alla conclusione. Usa i numeri Poisson come supporto, non come unica fonte. Sii analitico e diretto.
 
 PRONOSTICO SICURO
-Indica chiaramente la scommessa a basso rischio con motivazione in 2 righe. Esempio: "Over 1.5 - 89% di probabilita'"
+Scommessa a basso rischio con percentuale. Es: "Over 1.5 - 89% di probabilita' - motivazione"
 
 PRONOSTICO ALLETTANTE (PIU' RISCHIOSO)
-Indica una scommessa con piu' valore potenziale ma maggiore rischio. Motiva in 2 righe.
+Scommessa con maggiore valore potenziale. Includi percentuale e motivazione in 2 righe.
 
 LIVELLO DI CONFIDENZA COMPLESSIVO
-Esprimi un voto da 1 a 10 sulla solidita' dell'analisi e spiega brevemente perche'.
+Voto da 1 a 10 con motivazione breve sulla qualita' dei dati disponibili.
 
-IMPORTANTE: Non inventare risultati o nomi di giocatori se non li trovi nelle news. In quel caso dillo esplicitamente."""
+IMPORTANTE: Usa SOLO i dati reali forniti. Non inventare risultati, nomi o statistiche."""
 
         try:
             res = groq_client.chat.completions.create(
@@ -284,7 +374,7 @@ if 'live_data' in st.session_state and engine and g_sel is not None:
                 st.markdown(f"<div class='stat-container'><span class='label-header'>GG / NG</span><span class='val-p-green'>{m['gg']:.0%}</span> / <span class='val-p-red'>{(1-m['gg']):.0%}</span></div>", unsafe_allow_html=True)
             with c6:
                 st.write("<br>", unsafe_allow_html=True)
-                st.button("🔍", key=f"ex_{idx}", on_click=show_details, args=(h_api, a_api, m))
+                st.button("🔍", key=f"ex_{idx}", on_click=show_details, args=(h_api, a_api, m, camp_sel))
             st.markdown("</div>", unsafe_allow_html=True)
 else:
     st.info("👋 Terminale Pronto. Sincronizza per caricare la giornata.")
