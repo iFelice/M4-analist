@@ -105,15 +105,11 @@ def get_team_id(team_name, league_id):
             headers={"x-apisports-key": API_FOOTBALL_KEY},
             params={"search": team_name}
         )
+        st.write(f"DEBUG team {team_name}: status={r.status_code}, risposta={r.text[:300]}")
         data = r.json().get("response", [])
-        # Prendi il primo risultato che appartiene alla lega giusta
-        for item in data:
-            lids = [l["league"]["id"] for l in item.get("seasons", [])]
-            if league_id in lids or not lids:
-                return item["team"]["id"]
-        # Fallback: primo risultato disponibile
         return data[0]["team"]["id"] if data else None
-    except:
+    except Exception as e:
+        st.write(f"DEBUG errore {team_name}: {e}")
         return None
 
 def get_ultimi_risultati(team_id, n=5):
