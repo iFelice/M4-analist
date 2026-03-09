@@ -10,7 +10,6 @@ from scraper_xg import get_understat_xg, get_market_values
 
 # --- CONFIGURAZIONE CHIAVI (CLOUD SECRETS) ---
 GROQ_API_KEY = st.secrets.get("GROQ_API_KEY", "")
-API_FOOTBALL_KEY = st.secrets.get("API_FOOTBALL_KEY", "")
 API_KEY_ODDS = "a310fd7b74f24f2736a57c6caf768118"
 API_KEY_DATA = "c299e4a676a54d48a642f20bca7f4480"
 
@@ -97,84 +96,67 @@ def get_full_poisson(h_e, a_e):
             "u15": get_u(1.5), "u25": get_u(2.5), "u35": get_u(3.5), "gg": (1-h_p[0])*(1-a_p[0])}
 
 
-# --- DATI CONTESTUALI DA API-FOOTBALL ---
-def get_team_id(team_name, league_id):
-    try:
-        r = requests.get(
-            "https://v3.football.api-sports.io/teams",
-            headers={"x-apisports-key": API_FOOTBALL_KEY},
-            params={"search": team_name}
-        )
-        st.write(f"DEBUG team {team_name}: status={r.status_code}, risposta={r.text[:300]}")
-        data = r.json().get("response", [])
-        return data[0]["team"]["id"] if data else None
-    except Exception as e:
-        st.write(f"DEBUG errore {team_name}: {e}")
-        return None
+# --- DATI CONTESTUALI DA FOOTBALL-DATA.ORG ---
+def get_team_fd_id(team_name, camp_sel):
+    """Trova l'ID squadra su football-data.org dalla lista partite in sessione"""
+    matches = st.session_state.get("live_data", [])
+    for match in matches:
+        h = match["homeTeam"]
+        a = match["awayTeam"]
+        for team in [h, a]:
+            nome = team.get("shortName", "") or team.get("name", "")
+            if clean_name(nome).lower() == clean_name(team_name).lower():
+                return team["id"]
+    return None
 
-def get_ultimi_risultati(team_id, n=5):
-    """Ultime N partite giocate"""
+def get_ultimi_risultati_fd(team_id, camp_sel, n=5):
+    """Ultime N partite giocate da football-data.org"""
+    l_map = {"Serie A": "SA", "Premier League": "PL", "La Liga": "PD", "Bundesliga": "BL1"}
+    comp = l_map.get(camp_sel, "SA")
     try:
         r = requests.get(
-            "https://v3.football.api-sports.io/fixtures",
-            headers={"x-apisports-key": API_FOOTBALL_KEY},
-            params={"team": team_id, "last": n, "status": "FT", "season": 2025}
+            f"https://api.football-data.org/v4/teams/{team_id}/matches",
+            headers={"X-Auth-Token": API_KEY_DATA},
+            params={"status": "FINISHED", "limit": n, "competitions": comp}
         )
         risultati = []
-        for f in r.json().get("response", []):
-            home = f["teams"]["home"]["name"]
-            away = f["teams"]["away"]["name"]
-            gh = f["goals"]["home"]
-            ga = f["goals"]["away"]
-            winner = f["teams"]["home"]["winner"]
-            if f["teams"]["home"]["id"] == team_id:
-                esito = "V" if winner else ("P" if winner is False else "X")
-                risultati.append(f"{home} {gh}-{ga} {away} ({esito})")
+        for match in r.json().get("matches", [])[-n:]:
+            home = match["homeTeam"].get("shortName") or match["homeTeam"].get("name", "?")
+            away = match["awayTeam"].get("shortName") or match["awayTeam"].get("name", "?")
+            gh = match["score"]["fullTime"]["home"]
+            ga = match["score"]["fullTime"]["away"]
+            winner = match["score"]["winner"]
+            if match["homeTeam"]["id"] == team_id:
+                esito = "V" if winner == "HOME_TEAM" else ("X" if winner == "DRAW" else "P")
             else:
-                esito = "V" if winner is False else ("P" if winner else "X")
-                risultati.append(f"{home} {gh}-{ga} {away} ({esito})")
+                esito = "V" if winner == "AWAY_TEAM" else ("X" if winner == "DRAW" else "P")
+            risultati.append(f"{home} {gh}-{ga} {away} ({esito})")
         return risultati
     except:
         return []
 
-def get_infortunati(team_id, league_id):
-    """Infortunati e squalificati"""
-    try:
-        r = requests.get(
-            "https://v3.football.api-sports.io/injuries",
-            headers={"x-apisports-key": API_FOOTBALL_KEY},
-            params={"team": team_id, "league": league_id, "season": 2025}
-        )
-        infortunati = []
-        for p in r.json().get("response", [])[:8]:
-            nome = p["player"]["name"]
-            tipo = p["player"]["type"]
-            infortunati.append(f"{nome} ({tipo})")
-        return infortunati
-    except:
-        return []
-
 def get_contesto_partita(h, a, camp_sel):
-    league_map = {"Serie A": 135, "Premier League": 39, "La Liga": 140, "Bundesliga": 78}
-    league_id = league_map.get(camp_sel, 135)
-
-    if not API_FOOTBALL_KEY:
-        return None
-
-    h_id = get_team_id(h, league_id)
-    a_id = get_team_id(a, league_id)
-    st.write(f"DEBUG - {h} ID: {h_id} | {a} ID: {a_id}")
+    """Recupera ultime 5 partite + news infortunati"""
+    h_id = get_team_fd_id(h, camp_sel)
+    a_id = get_team_fd_id(a, camp_sel)
 
     contesto = {"h_risultati": [], "a_risultati": [], "h_infortunati": [], "a_infortunati": []}
 
     if h_id:
-        contesto["h_risultati"] = get_ultimi_risultati(h_id)
-        contesto["h_infortunati"] = get_infortunati(h_id, league_id)
+        contesto["h_risultati"] = get_ultimi_risultati_fd(h_id, camp_sel)
     if a_id:
-        contesto["a_risultati"] = get_ultimi_risultati(a_id)
-        contesto["a_infortunati"] = get_infortunati(a_id, league_id)
+        contesto["a_risultati"] = get_ultimi_risultati_fd(a_id, camp_sel)
 
-    st.write(f"DEBUG contesto: {contesto}")
+    # Infortunati via DuckDuckGo (testo mirato)
+    try:
+        with DDGS() as ddgs:
+            for r in ddgs.text(f"{h} infortunati squalificati {camp_sel} 2026", max_results=2):
+                contesto["h_infortunati"].append(r["body"][:300])
+            for r in ddgs.text(f"{a} infortunati squalificati {camp_sel} 2026", max_results=2):
+                contesto["a_infortunati"].append(r["body"][:300])
+    except:
+        pass
+
     return contesto
 
 # --- POPUP AI ---
@@ -207,14 +189,14 @@ def show_details(h, a, m, camp_sel="Serie A"):
         if contesto:
             h_ris = ", ".join(contesto["h_risultati"]) if contesto["h_risultati"] else "Non disponibili"
             a_ris = ", ".join(contesto["a_risultati"]) if contesto["a_risultati"] else "Non disponibili"
-            h_inf = ", ".join(contesto["h_infortunati"]) if contesto["h_infortunati"] else "Nessuno rilevato"
-            a_inf = ", ".join(contesto["a_infortunati"]) if contesto["a_infortunati"] else "Nessuno rilevato"
+            h_inf = " | ".join(contesto["h_infortunati"]) if contesto["h_infortunati"] else "Nessuna info disponibile"
+            a_inf = " | ".join(contesto["a_infortunati"]) if contesto["a_infortunati"] else "Nessuna info disponibile"
             dati_reali = f"""
 DATI REALI AGGIORNATI:
 - Ultime 5 partite {h}: {h_ris}
 - Ultime 5 partite {a}: {a_ris}
-- Indisponibili {h}: {h_inf}
-- Indisponibili {a}: {a_inf}"""
+- Notizie indisponibili {h}: {h_inf}
+- Notizie indisponibili {a}: {a_inf}"""
         else:
             dati_reali = f"CONTESTO WEB: {news_extra}"
 
