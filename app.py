@@ -157,12 +157,12 @@ def get_contesto_partita(h, a, camp_sel):
     league_map = {"Serie A": 135, "Premier League": 39, "La Liga": 140, "Bundesliga": 78}
     league_id = league_map.get(camp_sel, 135)
 
-    st.write(f"DEBUG - Chiave presente: {bool(API_FOOTBALL_KEY)} | Lunghezza: {len(API_FOOTBALL_KEY) if API_FOOTBALL_KEY else 0}")
-
     if not API_FOOTBALL_KEY:
         return None
+
     h_id = get_team_id(h, league_id)
     a_id = get_team_id(a, league_id)
+    st.write(f"DEBUG - {h} ID: {h_id} | {a} ID: {a_id}")
 
     contesto = {"h_risultati": [], "a_risultati": [], "h_infortunati": [], "a_infortunati": []}
 
@@ -173,6 +173,7 @@ def get_contesto_partita(h, a, camp_sel):
         contesto["a_risultati"] = get_ultimi_risultati(a_id)
         contesto["a_infortunati"] = get_infortunati(a_id, league_id)
 
+    st.write(f"DEBUG contesto: {contesto}")
     return contesto
 
 # --- POPUP AI ---
