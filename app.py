@@ -99,14 +99,19 @@ def get_full_poisson(h_e, a_e):
 
 # --- DATI CONTESTUALI DA API-FOOTBALL ---
 def get_team_id(team_name, league_id):
-    """Cerca l'ID squadra su API-Football"""
     try:
         r = requests.get(
             "https://v3.football.api-sports.io/teams",
             headers={"x-apisports-key": API_FOOTBALL_KEY},
-            params={"search": team_name, "league": league_id, "season": 2024}
+            params={"search": team_name}
         )
         data = r.json().get("response", [])
+        # Prendi il primo risultato che appartiene alla lega giusta
+        for item in data:
+            lids = [l["league"]["id"] for l in item.get("seasons", [])]
+            if league_id in lids or not lids:
+                return item["team"]["id"]
+        # Fallback: primo risultato disponibile
         return data[0]["team"]["id"] if data else None
     except:
         return None
