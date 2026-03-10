@@ -150,6 +150,499 @@ def get_team_fd_id(team_name, camp_sel):
 
 def get_ultimi_risultati_fd(team_id, camp_sel, n=5):
     """Ultime N partite giocate da football-data.org"""
+    try:
+        r = requests.get(
+            f"https://api.football-data.org/v4/teams/{team_id}/matches",
+            headers={"X-Auth-Token": API_KEY_DATA},
+            params={"status": "FINISHED", "limit": n}
+        )
+        risultati = []
+        for match in r.json().get("matches", [])[-n:]:
+            home = match["homeTeam"].get("shortName") or match["homeTeam"].get("name", "?")
+            away = match["awayTeam"].get("shortName") or match["awayTeam"].get("name", "?")
+            gh = match["score"]["fullTime"]["home"]
+            ga = match["score"]["fullTime"]["away"]
+            winner = match["score"]["winner"]
+            if match["homeTeam"]["id"] == team_id:
+                esito = "V" if winner == "HOME_TEAM" else ("X" if winner == "DRAW" else "P")
+            else:
+                esito = "V" if winner == "AWAY_TEAM" else ("X" if winner == "DRAW" else "P")
+            risultati.append(f"{home} {gh}-{ga} {away} ({esito})")
+        return risultati
+    except:
+        return []
+
+def get_contesto_partita(h, a, camp_sel):
+    """Recupera ultime 5 partite + news infortunati"""
+    h_id = get_team_fd_id(h, camp_sel)
+    a_id = get_team_fd_id(a, camp_sel)
+
+    contesto = {"h_risultati": [], "a_risultati": [], "h_infortunati": [], "a_infortunati": []}
+
+    if h_id:
+        contesto["h_risultati"] = get_ultimi_risultati_fd(h_id, camp_sel)
+    if a_id:
+        contesto["a_risultati"] = get_ultimi_risultati_fd(a_id, camp_sel)
+
+    # Infortunati via DuckDuckGo (testo mirato)
+    try:
+        with DDGS() as ddgs:
+            for r in ddgs.text(f"{h} infortunati squalificati {camp_sel} 2026", max_results=2):
+                contesto["h_infortunati"].append(r["body"][:300])
+            for r in ddgs.text(f"{a} infortunati squalificati {camp_sel} 2026", max_results=2):
+                contesto["a_infortunati"].append(r["body"][:300])
+    except:
+        pass
+
+    return contesto
+
+# --- POPUP AI ---
+@st.dialog("STRATEGIC ANALYSIS", width="large")
+def show_details(h, a, m, camp_sel="Serie A"):
+    if not groq_client:
+        st.error("Billy non e' configurato correttamente. Aggiungi GROQ_API_KEY nei secrets.")
+        return
+    with st.spinner("Billy Walters sta analizzando..."):
+        # Dati strutturati da API-Football
+        contesto = get_contesto_partita(h, a, camp_sel)
+
+        # Fallback DuckDuckGo solo se API-Football non disponibile
+        news_extra = ""
+        try:
+            with DDGS() as ddgs:
+                for r in ddgs.text(f"{h} {a} probabili formazioni 2026", max_results=3):
+                    news_extra += f" {r['body']}"
+        except:
+            news_extra = ""
+
+        p1 = m['1']
+        pX = m['X']
+        p2 = m['2']
+        po25 = 1 - m['u25']
+        po15 = 1 - m['u15']
+        pgg = m['gg']
+
+        # Quote bookmaker dalla sessione
+        q1, qX, q2 = 0.0, 0.0, 0.0
+        qo25, qu25, qgg, qng = 0.0, 0.0, 0.0, 0.0
+        h_cl = clean_name(h)
+
+        # 1X2
+        if "live_odds" in st.session_state and isinstance(st.session_state.live_odds, list):
+            for mo in st.session_state.live_odds:
+                if h_cl in clean_name(mo.get("home_team", "")):
+                    try:
+                        odds = {o["name"]: o["price"] for o in mo["bookmakers"][0]["markets"][0]["outcomes"]}
+                        q1 = odds.get(mo["home_team"], 0.0)
+                        qX = odds.get("Draw", odds.get("Tie", 0.0))
+                        q2 = odds.get(mo["away_team"], 0.0)
+                    except: pass
+
+        # Over/Under 2.5
+        if "live_odds_totals" in st.session_state and isinstance(st.session_state.live_odds_totals, list):
+            for mo in st.session_state.live_odds_totals:
+                if h_cl in clean_name(mo.get("home_team", "")):
+                    try:
+                        for bk in mo.get("bookmakers", []):
+                            for mkt in bk.get("markets", []):
+                                outcomes = {o["name"]: o["price"] for o in mkt.get("outcomes", [])}
+                                if "Over" in outcomes:
+                                    qo25 = outcomes.get("Over", 0.0)
+                                    qu25 = outcomes.get("Under", 0.0)
+                                    break
+                            if qo25 > 0: break
+                    except: pass
+
+        # GG/NG
+        if "live_odds_btts" in st.session_state and isinstance(st.session_state.live_odds_btts, list):
+            for mo in st.session_state.live_odds_btts:
+                if h_cl in clean_name(mo.get("home_team", "")):
+                    try:
+                        for bk in mo.get("bookmakers", []):
+                            for mkt in bk.get("markets", []):
+                                outcomes = {o["name"]: o["price"] for o in mkt.get("outcomes", [])}
+                                if "Yes" in outcomes:
+                                    qgg = outcomes.get("Yes", 0.0)
+                                    qng = outcomes.get("No", 0.0)
+                                    break
+                            if qgg > 0: break
+                    except: pass
+
+        # Calcolo value bet reale
+        def value(prob, quota):
+            if quota <= 0: return None
+            return round((prob * quota - 1) * 100, 1)
+
+        def fmt_value(v):
+            if v is None: return "n/d"
+            return f"{v:+.1f}%"
+
+        v1   = value(p1,   q1)
+        vX   = value(pX,   qX)
+        v2   = value(p2,   q2)
+        vo25 = value(po25, qo25)
+        vu25 = value(1-po25, qu25)
+        vgg  = value(pgg,  qgg)
+        vng  = value(1-pgg, qng)
+
+        has_quotes = q1 > 0
+        quote_str = f"""
+QUOTE BOOKMAKER E VALUE (value = prob_modello x quota - 1):
+- 1 ({h}): quota {q1 or "n/d"} | prob {p1:.0%} | value {fmt_value(v1)}
+- X: quota {qX or "n/d"} | prob {pX:.0%} | value {fmt_value(vX)}
+- 2 ({a}): quota {q2 or "n/d"} | prob {p2:.0%} | value {fmt_value(v2)}
+- Over 2.5: quota {qo25 or "n/d"} | prob {po25:.0%} | value {fmt_value(vo25)}
+- Under 2.5: quota {qu25 or "n/d"} | prob {1-po25:.0%} | value {fmt_value(vu25)}
+- GG (entrambe segnano): quota {qgg or "n/d"} | prob {pgg:.0%} | value {fmt_value(vgg)}
+- NG: quota {qng or "n/d"} | prob {1-pgg:.0%} | value {fmt_value(vng)}
+- Over 1.5: prob {po15:.0%} (mercato solitamente a bassa quota, quasi sempre value negativo)"""
+
+        # Classifica
+        classifica = st.session_state.get("classifica", {})
+        h_cl_name = clean_name(h)
+        a_cl_name = clean_name(a)
+        h_stand = classifica.get(h_cl_name, {})
+        a_stand = classifica.get(a_cl_name, {})
+        if h_stand and a_stand:
+            class_str = f"""
+CLASSIFICA ATTUALE:
+- {h}: {h_stand['pos']}° posto | {h_stand['punti']} punti | {h_stand['pg']} partite | GF {h_stand['gf']} GS {h_stand['gs']} | Forma: {h_stand['forma']}
+- {a}: {a_stand['pos']}° posto | {a_stand['punti']} punti | {a_stand['pg']} partite | GF {a_stand['gf']} GS {a_stand['gs']} | Forma: {a_stand['forma']}"""
+        else:
+            class_str = ""
+
+        # Risultati recenti e infortunati
+        if contesto:
+            h_ris = ", ".join(contesto["h_risultati"]) if contesto["h_risultati"] else "Non disponibili"
+            a_ris = ", ".join(contesto["a_risultati"]) if contesto["a_risultati"] else "Non disponibili"
+            h_inf = " | ".join(contesto["h_infortunati"]) if contesto["h_infortunati"] else "Nessuna info"
+            a_inf = " | ".join(contesto["a_infortunati"]) if contesto["a_infortunati"] else "Nessuna info"
+            dati_reali = f"""
+RISULTATI RECENTI:
+- Ultime 5 partite {h}: {h_ris}
+- Ultime 5 partite {a}: {a_ris}
+NOTIZIE INDISPONIBILI:
+- {h}: {h_inf}
+- {a}: {a_inf}"""
+        else:
+            dati_reali = f"CONTESTO WEB: {news_extra}"
+
+        prompt = f"""Sei Billy Walters, il leggendario analista sportivo. Analizza {h} vs {a}.
+
+{quote_str}
+{class_str}
+{dati_reali}
+
+REGOLE FONDAMENTALI PER I PRONOSTICI:
+- Il PRONOSTICO SICURO deve essere la scommessa con il miglior rapporto rischio/rendimento, NON necessariamente quella con probabilita' piu' alta. Considera il value (prob * quota - 1). Evita di suggerire sempre Over 1.5 se il value e' basso.
+- Il PRONOSTICO ALLETTANTE deve avere value positivo o almeno neutro con quota interessante.
+- Se le quote non sono disponibili, ragiona sulla probabilita' relativa tra i mercati.
+
+STRUTTURA L'ANALISI COSI' (italiano, tono deciso e analitico):
+
+STATO DI FORMA
+Analizza i risultati reali delle ultime 5 partite. Commenta vittorie, pareggi, sconfitte, trend. Usa la classifica per contestualizzare la posizione e i punti delle due squadre.
+
+ANALISI TATTICA
+Punti di forza e debolezza di ciascuna squadra basati sui dati reali. Commenta gli indisponibili. Analizza la solidita' difensiva (GS) e la capacita' offensiva (GF) dalla classifica.
+
+RAGIONAMENTO VERSO IL PRONOSTICO
+Discorsivo: come i dati reali, la classifica e il value delle quote ti portano alla conclusione. I dati Poisson sono supporto, non fonte unica.
+
+PRONOSTICO SICURO
+Mercato con miglior value o minor rischio. Formato: "Mercato - prob X% - quota Y - value Z% - motivazione"
+
+PRONOSTICO ALLETTANTE (PIU' RISCHIOSO)
+Mercato con quota interessante e buon value potenziale. Stesso formato.
+
+LIVELLO DI CONFIDENZA COMPLESSIVO
+Voto 1-10 con motivazione. Considera qualita' e quantita' dei dati disponibili.
+
+IMPORTANTE: Usa SOLO dati forniti. Non inventare statistiche o nomi."""
+
+        try:
+            res = groq_client.chat.completions.create(
+                model="llama-3.3-70b-versatile",
+                messages=[{"role": "user", "content": prompt}],
+                max_tokens=1200
+            )
+            testo = res.choices[0].message.content.replace("**", "").replace("*", "")
+            # Rendering con sezioni in evidenza
+            righe = testo.split("\n")
+            html = ""
+            sezioni = ["STATO DI FORMA", "ANALISI TATTICA", "RAGIONAMENTO VERSO IL PRONOSTICO",
+                       "PRONOSTICO SICURO", "PRONOSTICO ALLETTANTE", "LIVELLO DI CONFIDENZA"]
+            for riga in righe:
+                riga_strip = riga.strip()
+                if any(riga_strip.startswith(s) for s in sezioni):
+                    html += f"<div style='margin-top:16px; margin-bottom:4px; font-size:13px; font-weight:900; text-transform:uppercase; color:#3b82f6; letter-spacing:1px;'>{riga_strip}</div>"
+                elif riga_strip:
+                    html += f"<div style='font-size:15px; line-height:1.6; color:#1a1a1a; margin-bottom:4px;'>{riga_strip}</div>"
+            # CSS per forzare popup bianco
+            st.markdown("""<style>
+            div[data-testid="stDialog"] > div > div {
+                background-color: #ffffff !important;
+                color: #1a1a1a !important;
+            }
+            div[data-testid="stDialog"] p,
+            div[data-testid="stDialog"] div {
+                color: #1a1a1a !important;
+            }
+            </style>""", unsafe_allow_html=True)
+            st.markdown(html, unsafe_allow_html=True)
+        except Exception as e:
+            st.error(f"Errore AI: {e}")
+
+# --- UI PRINCIPALE ---
+st.markdown('<div class="maradona-header"><h1>M4 STRATEGIC TERMINAL</h1><p>Intelligence Evolution v28.1</p></div>', unsafe_allow_html=True)
+
+# Mapping odds sport key
+map_odds = {
+    "Serie A": "soccer_italy_serie_a",
+    "Premier League": "soccer_epl",
+    "La Liga": "soccer_spain_la_liga",
+    "Bundesliga": "soccer_germany_bundesliga"
+}
+
+with st.sidebar:
+    st.title("🎩 Billy Walters Chat")
+    camp_sel = st.selectbox("CAMPIONATO", ["Serie A", "Premier League", "La Liga", "Bundesliga"])
+
+    if st.button("🔄 SINCRONIZZA TURNO"):
+        l_map = {"Serie A": "SA", "Premier League": "PL", "La Liga": "PD", "Bundesliga": "BL1"}
+        try:
+            # FIX: status=TIMED+SCHEDULED per prendere tutte le partite imminenti
+            resp = requests.get(
+                f"https://api.football-data.org/v4/competitions/{l_map[camp_sel]}/matches?status=TIMED,SCHEDULED",
+                headers={'X-Auth-Token': API_KEY_DATA}
+            )
+            st.session_state.live_data = resp.json().get('matches', [])
+            st.session_state.live_camp = camp_sel
+
+            # Classifica aggiornata
+            try:
+                stand_resp = requests.get(
+                    f"https://api.football-data.org/v4/competitions/{l_map[camp_sel]}/standings",
+                    headers={"X-Auth-Token": API_KEY_DATA}
+                )
+                standings_raw = stand_resp.json().get("standings", [])
+                classifica = {}
+                for group in standings_raw:
+                    for row in group.get("table", []):
+                        nome = clean_name(row["team"].get("shortName") or row["team"].get("name", ""))
+                        classifica[nome] = {
+                            "pos": row["position"],
+                            "punti": row["points"],
+                            "pg": row["playedGames"],
+                            "gf": row["goalsFor"],
+                            "gs": row["goalsAgainst"],
+                            "forma": row.get("form", "")
+                        }
+                st.session_state.classifica = classifica
+            except:
+                st.session_state.classifica = {}
+
+            # Odds - scarica h2h, totals (over/under) e btts (GG/NG)
+            sport_key = map_odds[camp_sel]
+            try:
+                odds_h2h = requests.get(
+                    f"https://api.the-odds-api.com/v4/sports/{sport_key}/odds/",
+                    params={"apiKey": API_KEY_ODDS, "regions": "eu", "markets": "h2h"}
+                ).json()
+                odds_totals = requests.get(
+                    f"https://api.the-odds-api.com/v4/sports/{sport_key}/odds/",
+                    params={"apiKey": API_KEY_ODDS, "regions": "eu", "markets": "totals"}
+                ).json()
+                odds_btts = requests.get(
+                    f"https://api.the-odds-api.com/v4/sports/{sport_key}/odds/",
+                    params={"apiKey": API_KEY_ODDS, "regions": "eu", "markets": "btts"}
+                ).json()
+                st.session_state.live_odds = odds_h2h if isinstance(odds_h2h, list) else []
+                st.session_state.live_odds_totals = odds_totals if isinstance(odds_totals, list) else []
+                st.session_state.live_odds_btts = odds_btts if isinstance(odds_btts, list) else []
+            except:
+                st.session_state.live_odds = []
+                st.session_state.live_odds_totals = []
+                st.session_state.live_odds_btts = []
+        except Exception as e:
+            st.sidebar.error(f"Errore sincronizzazione: {e}")
+
+    if "live_data" in st.session_state and st.session_state.live_data:
+        giornate = sorted(list(set([m['matchday'] for m in st.session_state.live_data])))
+        g_sel = st.selectbox("GIORNATA", giornate)
+    else:
+        g_sel = None
+
+engine = get_league_engine(camp_sel)
+
+if 'live_data' in st.session_state and engine and g_sel is not None:
+    team_stats, avg_h, avg_a, df_full = engine
+    matches = [m for m in st.session_state.live_data if m['matchday'] == g_sel]
+    st.subheader(f"🏟️ {camp_sel.upper()} - GIORNATA {g_sel}")
+
+    for idx, match in enumerate(matches):
+        h_api = match['homeTeam'].get('shortName') or match['homeTeam'].get('name', '?')
+        a_api = match['awayTeam'].get('shortName') or match['awayTeam'].get('name', '?')
+        h_cl, a_cl = clean_name(h_api), clean_name(a_api)
+        dt = (datetime.strptime(match['utcDate'], "%Y-%m-%dT%H:%M:%SZ") + timedelta(hours=1)).strftime("%d/%m | %H:%M")
+
+        q1, qX, q2 = 1.0, 1.0, 1.0
+        if 'live_odds' in st.session_state and isinstance(st.session_state.live_odds, list):
+            for mo in st.session_state.live_odds:
+                if h_cl in clean_name(mo.get('home_team', '')):
+                    try:
+                        odds = {o['name']: o['price'] for o in mo['bookmakers'][0]['markets'][0]['outcomes']}
+                        q1 = odds.get(mo['home_team'], 1.0)
+                        qX = odds.get('Draw', odds.get('Tie', 1.0))
+                        q2 = odds.get(mo['away_team'], 1.0)
+                    except:
+                        pass
+
+        h_s = team_stats.get(h_cl, {'att': 0.85, 'def': 1.15})
+        a_s = team_stats.get(a_cl, {'att': 0.85, 'def': 1.15})
+        m = get_full_poisson(h_s['att'] * a_s['def'] * avg_h, a_s['att'] * h_s['def'] * avg_a)
+
+        with st.container():
+            st.markdown('<div class="match-card">', unsafe_allow_html=True)
+            c_h, c1, c2, c3, c4, c5, c6 = st.columns([1.5, 1.2, 0.8, 0.8, 0.8, 1, 0.4])
+            with c_h:
+                st.markdown(f"<span class='team-name'>{h_api}<br>{a_api}</span><br><span class='match-date'>🕒 {dt}</span>", unsafe_allow_html=True)
+            with c1:
+                st.markdown(f"""<div class='stat-container'><span class='label-header'>Esito 1X2</span>
+                <div style='display:flex; justify-content:space-around'>
+                    <div><span class='val-sign'>1</span><br><span class='val-p-green'>{m['1']:.0%}</span><br><span class='val-q'>{q1}</span></div>
+                    <div><span class='val-sign'>X</span><br><span class='val-p-green'>{m['X']:.0%}</span><br><span class='val-q'>{qX}</span></div>
+                    <div><span class='val-sign'>2</span><br><span class='val-p-green'>{m['2']:.0%}</span><br><span class='val-q'>{q2}</span></div>
+                </div></div>""", unsafe_allow_html=True)
+            with c2:
+                st.markdown(f"<div class='stat-container'><span class='label-header'>U/O 1.5</span><span class='val-p-red'>{m['u15']:.0%}</span> / <span class='val-p-green'>{(1-m['u15']):.0%}</span></div>", unsafe_allow_html=True)
+            with c3:
+                st.markdown(f"<div class='stat-container'><span class='label-header'>U/O 2.5</span><span class='val-p-red'>{m['u25']:.0%}</span> / <span class='val-p-green'>{(1-m['u25']):.0%}</span></div>", unsafe_allow_html=True)
+            with c4:
+                st.markdown(f"<div class='stat-container'><span class='label-header'>U/O 3.5</span><span class='val-p-red'>{m['u35']:.0%}</span> / <span class='val-p-green'>{(1-m['u35']):.0%}</span></div>", unsafe_allow_html=True)
+            with c5:
+                st.markdown(f"<div class='stat-container'><span class='label-header'>GG / NG</span><span class='val-p-green'>{m['gg']:.0%}</span> / <span class='val-p-red'>{(1-m['gg']):.0%}</span></div>", unsafe_allow_html=True)
+            with c6:
+                st.write("<br>", unsafe_allow_html=True)
+                st.button("🔍", key=f"ex_{idx}", on_click=show_details, args=(h_api, a_api, m, camp_sel))
+            st.markdown("</div>", unsafe_allow_html=True)
+else:
+    st.info("👋 Terminale Pronto. Sincronizza per caricare la giornata.")    .maradona-header {{
+        background: linear-gradient(rgba(0, 45, 91, 0.8), rgba(0, 45, 91, 0.8)), 
+                    url('https://images.unsplash.com/photo-1574629810360-7efbbe195018?auto=format&fit=crop&w=1600&q=80');
+        background-size: cover; background-position: center; padding: 40px;
+        border-radius: 0 0 20px 20px; text-align: center; margin: -60px -60px 30px -60px; color: white;
+    }}
+    .match-card {{ background-color: {card}; border-radius: 12px; padding: 25px; margin-bottom: 8px; border: 1px solid {border}; box-shadow: 0 2px 8px rgba(0,0,0,0.05); }}
+    .team-name {{ font-size: 19px; font-weight: 800; color: #58a6ff; text-transform: uppercase; }}
+    .label-header {{ color: {lbl}; font-size: 15px !important; font-weight: 900; text-transform: uppercase; display: block; margin-bottom: 5px; border-bottom: 1px solid {border}; }}
+    .match-date {{ font-size: 15px !important; color: #3b82f6 !important; font-weight: 700; display: block; margin-top: 5px; }}
+    .stat-container {{ background-color: {stat_bg}; border: 1px solid {border}; border-radius: 8px; padding: 10px; text-align: center; height: 100%; }}
+    .val-sign {{ color: {txt} !important; font-weight: 800; font-size: 13px; margin-bottom: 2px; }}
+    .val-p-green {{ color: #28a745; font-size: 17px; font-weight: 800; }}
+    .val-p-red {{ color: #dc3545; font-size: 17px; font-weight: 800; }}
+    .val-q {{ color: #856404; font-size: 14px; font-weight: 700; display: block; margin-top: 3px; font-family: monospace; }}
+    [data-testid="stVerticalBlock"] > div {{ gap: 0rem !important; }}
+    </style>
+    """, unsafe_allow_html=True)
+
+# --- MOTORE LOGICO ---
+def clean_name(name):
+    n = str(name).strip()
+    m = {"Manchester United": "Man United", "Manchester City": "Man City", "Tottenham Hotspur": "Tottenham",
+         "Inter Milan": "Inter", "AC Milan": "Milan", "Atalanta BC": "Atalanta", "Hellas Verona": "Verona"}
+    n = m.get(n, n)
+    for r in ["BC", "FC", "AC ", "AS ", "1907", "Calcio"]: n = n.replace(r, "")
+    return n.strip()
+
+@st.cache_data
+def get_league_engine(camp_key):
+    p = {"Serie A": "SerieA", "Premier League": "Premier", "La Liga": "LaLiga", "Bundesliga": "Bundesliga", "Ligue 1": "Ligue1"}
+    prefix = p.get(camp_key)
+    if not prefix: return None
+
+    # Carica i file storici e il file Live separatamente
+    files_storici = sorted(glob.glob(f"./database/{prefix}_20*.csv"))
+    files_live = glob.glob(f"./database/{prefix}_Live.csv")
+
+    if not files_storici and not files_live: return None
+
+    dfs = []
+
+    # Stagioni storiche: peso 1x (base)
+    for f in files_storici:
+        try:
+            df_tmp = pd.read_csv(f, on_bad_lines='skip', low_memory=False)
+            df_tmp['peso'] = 1.0
+            dfs.append(df_tmp)
+        except: pass
+
+    # Stagione corrente (Live): peso 4x - conta molto di piu'
+    for f in files_live:
+        try:
+            df_tmp = pd.read_csv(f, on_bad_lines='skip', low_memory=False)
+            df_tmp['peso'] = 4.0
+            # Duplica le righe per simulare il peso maggiore
+            dfs.extend([df_tmp] * 4)
+        except: pass
+
+    if not dfs: return None
+
+    df = pd.concat(dfs, ignore_index=True)
+    df['Date'] = pd.to_datetime(df['Date'], dayfirst=True, errors='coerce')
+    df = df.dropna(subset=['HomeTeam', 'AwayTeam', 'FTR']).sort_values('Date')
+    df['HomeClean'] = df['HomeTeam'].apply(clean_name)
+    df['AwayClean'] = df['AwayTeam'].apply(clean_name)
+
+    xg_data = get_understat_xg(camp_key)
+    mkt_values = get_market_values()
+    avg_h, avg_a = df['FTHG'].mean(), df['FTAG'].mean()
+
+    stats = {}
+    for t in pd.concat([df['HomeClean'], df['AwayClean']]).unique():
+        h_h = df[df['HomeClean']==t]
+        a_h = df[df['AwayClean']==t]
+
+        # Se disponibili, usa xG dalla stagione corrente
+        if xg_data and t in xg_data:
+            att, defe = xg_data[t]['xG_avg'], xg_data[t]['xGA_avg']
+        else:
+            att_h = h_h['FTHG'].mean() / avg_h if not h_h.empty else 1.0
+            att_a = a_h['FTAG'].mean() / avg_a if not a_h.empty else 1.0
+            def_h = h_h['FTAG'].mean() / avg_a if not h_h.empty else 1.0
+            def_a = a_h['FTHG'].mean() / avg_h if not a_h.empty else 1.0
+            att = (att_h + att_a) / 2
+            defe = (def_h + def_a) / 2
+
+        val = mkt_values.get(t, 50)
+        stats[t] = {'att': att * (1 + (val/6000)), 'def': defe * (1 - (val/6000)), 'val': val}
+
+    return stats, avg_h, avg_a, df
+
+def get_full_poisson(h_e, a_e):
+    h_p = [poisson.pmf(i, h_e) for i in range(8)]
+    a_p = [poisson.pmf(i, a_e) for i in range(8)]
+    matrix = np.outer(h_p, a_p)
+    def get_u(limit): return sum([matrix[i,j] for i in range(8) for j in range(8) if i+j < limit])
+    return {"1": np.sum(np.tril(matrix, -1)), "X": np.sum(np.diag(matrix)), "2": np.sum(np.triu(matrix, 1)),
+            "u15": get_u(1.5), "u25": get_u(2.5), "u35": get_u(3.5), "gg": (1-h_p[0])*(1-a_p[0])}
+
+
+# --- DATI CONTESTUALI DA FOOTBALL-DATA.ORG ---
+def get_team_fd_id(team_name, camp_sel):
+    """Trova l'ID squadra su football-data.org dalla lista partite in sessione"""
+    matches = st.session_state.get("live_data", [])
+    for match in matches:
+        h = match["homeTeam"]
+        a = match["awayTeam"]
+        for team in [h, a]:
+            nome = team.get("shortName", "") or team.get("name", "")
+            if clean_name(nome).lower() == clean_name(team_name).lower():
+                return team["id"]
+    return None
+
+def get_ultimi_risultati_fd(team_id, camp_sel, n=5):
+    """Ultime N partite giocate da football-data.org"""
     l_map = {"Serie A": "SA", "Premier League": "PL", "La Liga": "PD", "Bundesliga": "BL1"}
     comp = l_map.get(camp_sel, "SA")
     try:
