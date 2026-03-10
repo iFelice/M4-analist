@@ -335,7 +335,7 @@ NOTIZIE INDISPONIBILI:
 
 REGOLE FONDAMENTALI PER I PRONOSTICI:
 - Il PRONOSTICO SICURO deve avere OBBLIGATORIAMENTE probabilita' >= 45%. Non puoi mai suggerire come pronostico sicuro un evento con probabilita' inferiore al 45%, anche se il value e' positivo. Tra i mercati con prob >= 45%, scegli quello con il miglior value o la quota piu' alta.
-- Il PRONOSTICO ALLETTANTE e' per scommesse con probabilita' tra 20% e 44% e value positivo, oppure eventi ad alta quota con buona motivazione tattica.
+- Il PRONOSTICO ALLETTANTE preferisce Over 2.5, GG o Under 2.5 con value positivo rispetto a vittorie con probabilita' inferiore al 30%. Una vittoria al 18% NON e' mai un buon pronostico allettante se esistono mercati Over/GG con value piu' alto o simile.
 - Evita di suggerire Over 1.5 come pronostico sicuro se il value e' negativo o la quota e' sotto 1.30.
 - Se nessun mercato ha prob >= 45% e value positivo, scegli quello con prob piu' alta tra i disponibili e segnala la limitazione.
 - Se le quote non sono disponibili, ragiona sulla probabilita' assoluta: sicuro >= 55%, allettante 25-54%.
@@ -410,10 +410,19 @@ with st.sidebar:
     st.title("🎩 Billy Walters Chat")
     camp_sel = st.selectbox("CAMPIONATO", ["Serie A", "Premier League", "La Liga", "Bundesliga"])
 
-    if st.button("🔄 SINCRONIZZA TURNO"):
+    # Sincronizza solo se non ci sono dati per questo campionato, oppure se l'utente preme Refresh
+    camp_cached = st.session_state.get("live_camp", None)
+    has_data = "live_data" in st.session_state and st.session_state.live_data and camp_cached == camp_sel
+
+    col_s1, col_s2 = st.columns([2, 1])
+    with col_s1:
+        do_sync = st.button("🔄 SINCRONIZZA TURNO", disabled=has_data)
+    with col_s2:
+        do_refresh = st.button("↺ Refresh", help="Forza nuovo aggiornamento quote e partite")
+
+    if do_sync or do_refresh:
         l_map = {"Serie A": "SA", "Premier League": "PL", "La Liga": "PD", "Bundesliga": "BL1"}
         try:
-            # FIX: status=TIMED+SCHEDULED per prendere tutte le partite imminenti
             resp = requests.get(
                 f"https://api.football-data.org/v4/competitions/{l_map[camp_sel]}/matches?status=TIMED,SCHEDULED",
                 headers={'X-Auth-Token': API_KEY_DATA}
@@ -488,17 +497,44 @@ if 'live_data' in st.session_state and engine and g_sel is not None:
         h_cl, a_cl = clean_name(h_api), clean_name(a_api)
         dt = (datetime.strptime(match['utcDate'], "%Y-%m-%dT%H:%M:%SZ") + timedelta(hours=1)).strftime("%d/%m | %H:%M")
 
-        q1, qX, q2 = 1.0, 1.0, 1.0
+        q1, qX, q2 = 0.0, 0.0, 0.0
+        qo25_card, qgg_card = 0.0, 0.0
+
         if 'live_odds' in st.session_state and isinstance(st.session_state.live_odds, list):
             for mo in st.session_state.live_odds:
                 if h_cl in clean_name(mo.get('home_team', '')):
                     try:
                         odds = {o['name']: o['price'] for o in mo['bookmakers'][0]['markets'][0]['outcomes']}
-                        q1 = odds.get(mo['home_team'], 1.0)
-                        qX = odds.get('Draw', odds.get('Tie', 1.0))
-                        q2 = odds.get(mo['away_team'], 1.0)
-                    except:
-                        pass
+                        q1 = odds.get(mo['home_team'], 0.0)
+                        qX = odds.get('Draw', odds.get('Tie', 0.0))
+                        q2 = odds.get(mo['away_team'], 0.0)
+                    except: pass
+
+        if 'live_odds_totals' in st.session_state and isinstance(st.session_state.live_odds_totals, list):
+            for mo in st.session_state.live_odds_totals:
+                if h_cl in clean_name(mo.get('home_team', '')):
+                    try:
+                        for bk in mo.get('bookmakers', []):
+                            for mkt in bk.get('markets', []):
+                                outs = {o['name']: o['price'] for o in mkt.get('outcomes', [])}
+                                if 'Over' in outs:
+                                    qo25_card = outs.get('Over', 0.0)
+                                    break
+                            if qo25_card > 0: break
+                    except: pass
+
+        if 'live_odds_btts' in st.session_state and isinstance(st.session_state.live_odds_btts, list):
+            for mo in st.session_state.live_odds_btts:
+                if h_cl in clean_name(mo.get('home_team', '')):
+                    try:
+                        for bk in mo.get('bookmakers', []):
+                            for mkt in bk.get('markets', []):
+                                outs = {o['name']: o['price'] for o in mkt.get('outcomes', [])}
+                                if 'Yes' in outs:
+                                    qgg_card = outs.get('Yes', 0.0)
+                                    break
+                            if qgg_card > 0: break
+                    except: pass
 
         h_s = team_stats.get(h_cl, {'att': 0.85, 'def': 1.15})
         a_s = team_stats.get(a_cl, {'att': 0.85, 'def': 1.15})
@@ -519,11 +555,13 @@ if 'live_data' in st.session_state and engine and g_sel is not None:
             with c2:
                 st.markdown(f"<div class='stat-container'><span class='label-header'>U/O 1.5</span><span class='val-p-red'>{m['u15']:.0%}</span> / <span class='val-p-green'>{(1-m['u15']):.0%}</span></div>", unsafe_allow_html=True)
             with c3:
-                st.markdown(f"<div class='stat-container'><span class='label-header'>U/O 2.5</span><span class='val-p-red'>{m['u25']:.0%}</span> / <span class='val-p-green'>{(1-m['u25']):.0%}</span></div>", unsafe_allow_html=True)
+                q_o25_str = f"<br><span class='val-q'>{qo25_card}</span>" if qo25_card > 0 else ""
+                st.markdown(f"<div class='stat-container'><span class='label-header'>U/O 2.5</span><span class='val-p-red'>{m['u25']:.0%}</span> / <span class='val-p-green'>{(1-m['u25']):.0%}</span>{q_o25_str}</div>", unsafe_allow_html=True)
             with c4:
                 st.markdown(f"<div class='stat-container'><span class='label-header'>U/O 3.5</span><span class='val-p-red'>{m['u35']:.0%}</span> / <span class='val-p-green'>{(1-m['u35']):.0%}</span></div>", unsafe_allow_html=True)
             with c5:
-                st.markdown(f"<div class='stat-container'><span class='label-header'>GG / NG</span><span class='val-p-green'>{m['gg']:.0%}</span> / <span class='val-p-red'>{(1-m['gg']):.0%}</span></div>", unsafe_allow_html=True)
+                q_gg_str = f"<br><span class='val-q'>{qgg_card}</span>" if qgg_card > 0 else ""
+                st.markdown(f"<div class='stat-container'><span class='label-header'>GG / NG</span><span class='val-p-green'>{m['gg']:.0%}</span> / <span class='val-p-red'>{(1-m['gg']):.0%}</span>{q_gg_str}</div>", unsafe_allow_html=True)
             with c6:
                 st.write("<br>", unsafe_allow_html=True)
                 st.button("🔍", key=f"ex_{idx}", on_click=show_details, args=(h_api, a_api, m, camp_sel))
