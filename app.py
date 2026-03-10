@@ -150,11 +150,13 @@ def get_team_fd_id(team_name, camp_sel):
 
 def get_ultimi_risultati_fd(team_id, camp_sel, n=5):
     """Ultime N partite giocate da football-data.org"""
+    l_map = {"Serie A": "SA", "Premier League": "PL", "La Liga": "PD", "Bundesliga": "BL1", "Ligue 1": "FL1"}
+    comp = l_map.get(camp_sel, "SA")
     try:
         r = requests.get(
             f"https://api.football-data.org/v4/teams/{team_id}/matches",
             headers={"X-Auth-Token": API_KEY_DATA},
-            params={"status": "FINISHED", "limit": n}
+            params={"status": "FINISHED", "limit": 15, "competitions": comp}
         )
         risultati = []
         for match in r.json().get("matches", [])[-n:]:
@@ -253,20 +255,7 @@ def show_details(h, a, m, camp_sel="Serie A"):
                             if qo25 > 0: break
                     except: pass
 
-        # GG/NG
-        if "live_odds_btts" in st.session_state and isinstance(st.session_state.live_odds_btts, list):
-            for mo in st.session_state.live_odds_btts:
-                if h_cl in clean_name(mo.get("home_team", "")):
-                    try:
-                        for bk in mo.get("bookmakers", []):
-                            for mkt in bk.get("markets", []):
-                                outcomes = {o["name"]: o["price"] for o in mkt.get("outcomes", [])}
-                                if "Yes" in outcomes:
-                                    qgg = outcomes.get("Yes", 0.0)
-                                    qng = outcomes.get("No", 0.0)
-                                    break
-                            if qgg > 0: break
-                    except: pass
+        # GG/NG - mercato btts non disponibile nel piano attuale, skip
 
         # Calcolo value bet reale
         def value(prob, quota):
@@ -293,9 +282,8 @@ QUOTE BOOKMAKER E VALUE (value = prob_modello x quota - 1):
 - 2 ({a}): quota {q2 or "n/d"} | prob {p2:.0%} | value {fmt_value(v2)}
 - Over 2.5: quota {qo25 or "n/d"} | prob {po25:.0%} | value {fmt_value(vo25)}
 - Under 2.5: quota {qu25 or "n/d"} | prob {1-po25:.0%} | value {fmt_value(vu25)}
-- GG (entrambe segnano): quota {qgg or "n/d"} | prob {pgg:.0%} | value {fmt_value(vgg)}
-- NG: quota {qng or "n/d"} | prob {1-pgg:.0%} | value {fmt_value(vng)}
-- Over 1.5: prob {po15:.0%} (mercato solitamente a bassa quota, quasi sempre value negativo)"""
+- GG (entrambe segnano): prob {pgg:.0%} (quota bookmaker non disponibile)
+- Over 1.5: prob {po15:.0%} (quota solitamente bassa, quasi sempre value negativo)"""
 
         # Classifica
         classifica = st.session_state.get("classifica", {})
@@ -464,17 +452,11 @@ with st.sidebar:
                     f"https://api.the-odds-api.com/v4/sports/{sport_key}/odds/",
                     params={"apiKey": API_KEY_ODDS, "regions": "eu", "markets": "totals"}
                 ).json()
-                odds_btts = requests.get(
-                    f"https://api.the-odds-api.com/v4/sports/{sport_key}/odds/",
-                    params={"apiKey": API_KEY_ODDS, "regions": "eu", "markets": "btts"}
-                ).json()
                 st.session_state.live_odds = odds_h2h if isinstance(odds_h2h, list) else []
                 st.session_state.live_odds_totals = odds_totals if isinstance(odds_totals, list) else []
-                st.session_state.live_odds_btts = odds_btts if isinstance(odds_btts, list) else []
             except:
                 st.session_state.live_odds = []
                 st.session_state.live_odds_totals = []
-                st.session_state.live_odds_btts = []
         except Exception as e:
             st.sidebar.error(f"Errore sincronizzazione: {e}")
 
@@ -523,18 +505,7 @@ if 'live_data' in st.session_state and engine and g_sel is not None:
                             if qo25_card > 0: break
                     except: pass
 
-        if 'live_odds_btts' in st.session_state and isinstance(st.session_state.live_odds_btts, list):
-            for mo in st.session_state.live_odds_btts:
-                if h_cl in clean_name(mo.get('home_team', '')):
-                    try:
-                        for bk in mo.get('bookmakers', []):
-                            for mkt in bk.get('markets', []):
-                                outs = {o['name']: o['price'] for o in mkt.get('outcomes', [])}
-                                if 'Yes' in outs:
-                                    qgg_card = outs.get('Yes', 0.0)
-                                    break
-                            if qgg_card > 0: break
-                    except: pass
+        # btts non disponibile nel piano attuale
 
         h_s = team_stats.get(h_cl, {'att': 0.85, 'def': 1.15})
         a_s = team_stats.get(a_cl, {'att': 0.85, 'def': 1.15})
@@ -555,13 +526,12 @@ if 'live_data' in st.session_state and engine and g_sel is not None:
             with c2:
                 st.markdown(f"<div class='stat-container'><span class='label-header'>U/O 1.5</span><span class='val-p-red'>{m['u15']:.0%}</span> / <span class='val-p-green'>{(1-m['u15']):.0%}</span></div>", unsafe_allow_html=True)
             with c3:
-                q_o25_str = f"<br><span class='val-q'>{qo25_card}</span>" if qo25_card > 0 else ""
+                q_o25_str = f"<br><span class='val-q'>Over: {qo25_card}</span>" if qo25_card > 0 else ""
                 st.markdown(f"<div class='stat-container'><span class='label-header'>U/O 2.5</span><span class='val-p-red'>{m['u25']:.0%}</span> / <span class='val-p-green'>{(1-m['u25']):.0%}</span>{q_o25_str}</div>", unsafe_allow_html=True)
             with c4:
                 st.markdown(f"<div class='stat-container'><span class='label-header'>U/O 3.5</span><span class='val-p-red'>{m['u35']:.0%}</span> / <span class='val-p-green'>{(1-m['u35']):.0%}</span></div>", unsafe_allow_html=True)
             with c5:
-                q_gg_str = f"<br><span class='val-q'>{qgg_card}</span>" if qgg_card > 0 else ""
-                st.markdown(f"<div class='stat-container'><span class='label-header'>GG / NG</span><span class='val-p-green'>{m['gg']:.0%}</span> / <span class='val-p-red'>{(1-m['gg']):.0%}</span>{q_gg_str}</div>", unsafe_allow_html=True)
+                st.markdown(f"<div class='stat-container'><span class='label-header'>GG / NG</span><span class='val-p-green'>{m['gg']:.0%}</span> / <span class='val-p-red'>{(1-m['gg']):.0%}</span></div>", unsafe_allow_html=True)
             with c6:
                 st.write("<br>", unsafe_allow_html=True)
                 st.button("🔍", key=f"ex_{idx}", on_click=show_details, args=(h_api, a_api, m, camp_sel))
