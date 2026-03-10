@@ -224,53 +224,109 @@ def show_details(h, a, m, camp_sel="Serie A"):
         po15 = 1 - m['u15']
         pgg = m['gg']
 
-        # Costruisci sezione dati strutturati
+        # Quote bookmaker dalla sessione
+        q1, qX, q2 = 0.0, 0.0, 0.0
+        if "live_odds" in st.session_state and isinstance(st.session_state.live_odds, list):
+            h_cl = clean_name(h)
+            for mo in st.session_state.live_odds:
+                if h_cl in clean_name(mo.get("home_team", "")):
+                    try:
+                        odds = {o["name"]: o["price"] for o in mo["bookmakers"][0]["markets"][0]["outcomes"]}
+                        q1 = odds.get(mo["home_team"], 0.0)
+                        qX = odds.get("Draw", odds.get("Tie", 0.0))
+                        q2 = odds.get(mo["away_team"], 0.0)
+                    except: pass
+
+        # Calcolo value bet (probabilita' modello vs quota bookmaker)
+        def value(prob, quota):
+            if quota <= 0: return 0
+            return round((prob * quota - 1) * 100, 1)
+
+        v1 = value(p1, q1)
+        vX = value(pX, qX)
+        v2 = value(p2, q2)
+        vo15 = value(po15, 1.25)  # quota media stimata Over 1.5
+        vo25 = value(po25, 1.80)  # quota media stimata Over 2.5
+        vgg = value(pgg, 1.75)    # quota media stimata GG
+
+        quote_str = ""
+        if q1 > 0:
+            quote_str = f"""
+QUOTE BOOKMAKER E VALUE:
+- 1 ({h}): quota {q1} | prob modello {p1:.0%} | value {v1:+.1f}%
+- X (pareggio): quota {qX} | prob modello {pX:.0%} | value {vX:+.1f}%
+- 2 ({a}): quota {q2} | prob modello {p2:.0%} | value {v2:+.1f}%
+- Over 1.5: prob {po15:.0%} | value stimato {vo15:+.1f}%
+- Over 2.5: prob {po25:.0%} | value stimato {vo25:+.1f}%
+- GG: prob {pgg:.0%} | value stimato {vgg:+.1f}%"""
+        else:
+            quote_str = f"""
+PROBABILITA' MODELLO (quote non disponibili):
+- 1 ({h}): {p1:.0%} | X: {pX:.0%} | 2 ({a}): {p2:.0%}
+- Over 1.5: {po15:.0%} | Over 2.5: {po25:.0%} | GG: {pgg:.0%}"""
+
+        # Classifica
+        classifica = st.session_state.get("classifica", {})
+        h_cl_name = clean_name(h)
+        a_cl_name = clean_name(a)
+        h_stand = classifica.get(h_cl_name, {})
+        a_stand = classifica.get(a_cl_name, {})
+        if h_stand and a_stand:
+            class_str = f"""
+CLASSIFICA ATTUALE:
+- {h}: {h_stand['pos']}° posto | {h_stand['punti']} punti | {h_stand['pg']} partite | GF {h_stand['gf']} GS {h_stand['gs']} | Forma: {h_stand['forma']}
+- {a}: {a_stand['pos']}° posto | {a_stand['punti']} punti | {a_stand['pg']} partite | GF {a_stand['gf']} GS {a_stand['gs']} | Forma: {a_stand['forma']}"""
+        else:
+            class_str = ""
+
+        # Risultati recenti e infortunati
         if contesto:
             h_ris = ", ".join(contesto["h_risultati"]) if contesto["h_risultati"] else "Non disponibili"
             a_ris = ", ".join(contesto["a_risultati"]) if contesto["a_risultati"] else "Non disponibili"
-            h_inf = " | ".join(contesto["h_infortunati"]) if contesto["h_infortunati"] else "Nessuna info disponibile"
-            a_inf = " | ".join(contesto["a_infortunati"]) if contesto["a_infortunati"] else "Nessuna info disponibile"
+            h_inf = " | ".join(contesto["h_infortunati"]) if contesto["h_infortunati"] else "Nessuna info"
+            a_inf = " | ".join(contesto["a_infortunati"]) if contesto["a_infortunati"] else "Nessuna info"
             dati_reali = f"""
-DATI REALI AGGIORNATI:
+RISULTATI RECENTI:
 - Ultime 5 partite {h}: {h_ris}
 - Ultime 5 partite {a}: {a_ris}
-- Notizie indisponibili {h}: {h_inf}
-- Notizie indisponibili {a}: {a_inf}"""
+NOTIZIE INDISPONIBILI:
+- {h}: {h_inf}
+- {a}: {a_inf}"""
         else:
             dati_reali = f"CONTESTO WEB: {news_extra}"
 
-        prompt = f"""Sei Billy Walters, il leggendario analista sportivo. Devi analizzare {h} vs {a}.
+        prompt = f"""Sei Billy Walters, il leggendario analista sportivo. Analizza {h} vs {a}.
 
-DATI STATISTICI (motore Poisson):
-- Probabilita' vittoria {h}: {p1:.0%}
-- Probabilita' pareggio: {pX:.0%}
-- Probabilita' vittoria {a}: {p2:.0%}
-- Over 1.5: {po15:.0%} | Over 2.5: {po25:.0%}
-- Goal/Goal (entrambe segnano): {pgg:.0%}
-
+{quote_str}
+{class_str}
 {dati_reali}
 
-STRUTTURA LA TUA ANALISI ESATTAMENTE COSI' (in italiano, tono deciso e analitico):
+REGOLE FONDAMENTALI PER I PRONOSTICI:
+- Il PRONOSTICO SICURO deve essere la scommessa con il miglior rapporto rischio/rendimento, NON necessariamente quella con probabilita' piu' alta. Considera il value (prob * quota - 1). Evita di suggerire sempre Over 1.5 se il value e' basso.
+- Il PRONOSTICO ALLETTANTE deve avere value positivo o almeno neutro con quota interessante.
+- Se le quote non sono disponibili, ragiona sulla probabilita' relativa tra i mercati.
+
+STRUTTURA L'ANALISI COSI' (italiano, tono deciso e analitico):
 
 STATO DI FORMA
-Analizza i risultati reali delle ultime 5 partite di entrambe le squadre. Commenta vittorie, pareggi, sconfitte e il trend attuale. Confronta posizione in classifica e punti se disponibili.
+Analizza i risultati reali delle ultime 5 partite. Commenta vittorie, pareggi, sconfitte, trend. Usa la classifica per contestualizzare la posizione e i punti delle due squadre.
 
 ANALISI TATTICA
-Analizza punti di forza e debolezza di ciascuna squadra. Commenta gli indisponibili e il loro impatto sul match. Confronta xG e solidita' difensiva basandoti sui dati Poisson.
+Punti di forza e debolezza di ciascuna squadra basati sui dati reali. Commenta gli indisponibili. Analizza la solidita' difensiva (GS) e la capacita' offensiva (GF) dalla classifica.
 
 RAGIONAMENTO VERSO IL PRONOSTICO
-In modo discorsivo, spiega come i dati reali e le statistiche ti portano alla conclusione. Usa i numeri Poisson come supporto, non come unica fonte. Sii analitico e diretto.
+Discorsivo: come i dati reali, la classifica e il value delle quote ti portano alla conclusione. I dati Poisson sono supporto, non fonte unica.
 
 PRONOSTICO SICURO
-Scommessa a basso rischio con percentuale. Es: "Over 1.5 - 89% di probabilita' - motivazione"
+Mercato con miglior value o minor rischio. Formato: "Mercato - prob X% - quota Y - value Z% - motivazione"
 
 PRONOSTICO ALLETTANTE (PIU' RISCHIOSO)
-Scommessa con maggiore valore potenziale. Includi percentuale e motivazione in 2 righe.
+Mercato con quota interessante e buon value potenziale. Stesso formato.
 
 LIVELLO DI CONFIDENZA COMPLESSIVO
-Voto da 1 a 10 con motivazione breve sulla qualita' dei dati disponibili.
+Voto 1-10 con motivazione. Considera qualita' e quantita' dei dati disponibili.
 
-IMPORTANTE: Usa SOLO i dati reali forniti. Non inventare risultati, nomi o statistiche."""
+IMPORTANTE: Usa SOLO dati forniti. Non inventare statistiche o nomi."""
 
         try:
             res = groq_client.chat.completions.create(
@@ -329,9 +385,32 @@ with st.sidebar:
                 headers={'X-Auth-Token': API_KEY_DATA}
             )
             st.session_state.live_data = resp.json().get('matches', [])
-            st.session_state.live_camp = camp_sel  # salva il campionato attivo
+            st.session_state.live_camp = camp_sel
 
-            # FIX: usa il mapping corretto per le odds
+            # Classifica aggiornata
+            try:
+                stand_resp = requests.get(
+                    f"https://api.football-data.org/v4/competitions/{l_map[camp_sel]}/standings",
+                    headers={"X-Auth-Token": API_KEY_DATA}
+                )
+                standings_raw = stand_resp.json().get("standings", [])
+                classifica = {}
+                for group in standings_raw:
+                    for row in group.get("table", []):
+                        nome = clean_name(row["team"].get("shortName") or row["team"].get("name", ""))
+                        classifica[nome] = {
+                            "pos": row["position"],
+                            "punti": row["points"],
+                            "pg": row["playedGames"],
+                            "gf": row["goalsFor"],
+                            "gs": row["goalsAgainst"],
+                            "forma": row.get("form", "")
+                        }
+                st.session_state.classifica = classifica
+            except:
+                st.session_state.classifica = {}
+
+            # Odds
             sport_key = map_odds[camp_sel]
             url_q = f"https://api.the-odds-api.com/v4/sports/{sport_key}/odds/?apiKey={API_KEY_ODDS}&regions=eu&markets=h2h"
             odds_resp = requests.get(url_q)
