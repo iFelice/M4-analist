@@ -239,6 +239,7 @@ def show_details(h, a, m, camp_sel="Serie A"):
                     except: pass
 
         # Over/Under 2.5
+        st.write(f"DEBUG totals qo25={qo25} qu25={qu25} | btts qgg={qgg} qng={qng}")
         if "live_odds_totals" in st.session_state and isinstance(st.session_state.live_odds_totals, list):
             for mo in st.session_state.live_odds_totals:
                 if h_cl in clean_name(mo.get("home_team", "")):
@@ -252,8 +253,7 @@ def show_details(h, a, m, camp_sel="Serie A"):
                                     break
                             if qo25 > 0: break
                     except: pass
-                        st.write(f"DEBUG totals qo25={qo25} qu25={qu25} | btts qgg={qgg} qng={qng}")
-
+    
         # GG/NG
         if "live_odds_btts" in st.session_state and isinstance(st.session_state.live_odds_btts, list):
             for mo in st.session_state.live_odds_btts:
