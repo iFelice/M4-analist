@@ -334,9 +334,11 @@ NOTIZIE INDISPONIBILI:
 {dati_reali}
 
 REGOLE FONDAMENTALI PER I PRONOSTICI:
-- Il PRONOSTICO SICURO deve essere la scommessa con il miglior rapporto rischio/rendimento, NON necessariamente quella con probabilita' piu' alta. Considera il value (prob * quota - 1). Evita di suggerire sempre Over 1.5 se il value e' basso.
-- Il PRONOSTICO ALLETTANTE deve avere value positivo o almeno neutro con quota interessante.
-- Se le quote non sono disponibili, ragiona sulla probabilita' relativa tra i mercati.
+- Il PRONOSTICO SICURO deve avere OBBLIGATORIAMENTE probabilita' >= 45%. Non puoi mai suggerire come pronostico sicuro un evento con probabilita' inferiore al 45%, anche se il value e' positivo. Tra i mercati con prob >= 45%, scegli quello con il miglior value o la quota piu' alta.
+- Il PRONOSTICO ALLETTANTE e' per scommesse con probabilita' tra 20% e 44% e value positivo, oppure eventi ad alta quota con buona motivazione tattica.
+- Evita di suggerire Over 1.5 come pronostico sicuro se il value e' negativo o la quota e' sotto 1.30.
+- Se nessun mercato ha prob >= 45% e value positivo, scegli quello con prob piu' alta tra i disponibili e segnala la limitazione.
+- Se le quote non sono disponibili, ragiona sulla probabilita' assoluta: sicuro >= 55%, allettante 25-54%.
 
 STRUTTURA L'ANALISI COSI' (italiano, tono deciso e analitico):
 
