@@ -442,7 +442,7 @@ IL TUO METODO DI ANALISI - SEGUI QUESTO ORDINE RIGOROSO:
 REGOLE PRONOSTICI:
 - PRONOSTICO SICURO: il mercato piu' probabile basato sull'analisi dei dati, con prob >= 45%. Se Over 2.5 non e' supportato dai dati (squadre che difendono, pochi gol recenti), NON suggerirlo solo perche' la quota sembra ok.
 - PRONOSTICO ALLETTANTE: mercato con buon potenziale basato su un' osservazione tattica specifica. Puo' essere un esito meno probabile ma ben motivato dai dati.
-- Se una squadra ha giocato infrasettimanale in Europa, valuta concretamente l'impatto sulla freschezza fisica.
+- Se una squadra ha giocato infrasettimanale in Europa, quella squadra e' potenzialmente stanca. La stanchezza PENALIZZA quella squadra, non la avvantaggia. Esempio: se l'Atalanta ha giocato ieri in Champions, l'Atalanta potrebbe rendere peggio, non meglio.
 - NON suggerire Over 1.5 come pronostico, quasi sempre value negativo.
 - NON ripetere lo stesso mercato in sicuro e allettante.
 
