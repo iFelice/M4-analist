@@ -398,8 +398,10 @@ CLASSIFICA ATTUALE:
 
         # Risultati recenti, infortunati e infrasettimanali
         if contesto:
-            h_ris = ", ".join(contesto["h_risultati"]) if contesto["h_risultati"] else "Non disponibili"
-            a_ris = ", ".join(contesto["a_risultati"]) if contesto["a_risultati"] else "Non disponibili"
+            h_ris_list = contesto["h_risultati"] if contesto["h_risultati"] else []
+            a_ris_list = contesto["a_risultati"] if contesto["a_risultati"] else []
+            h_ris = f"({len(h_ris_list)} partite) " + ", ".join(h_ris_list) if h_ris_list else "Non disponibili"
+            a_ris = f"({len(a_ris_list)} partite) " + ", ".join(a_ris_list) if a_ris_list else "Non disponibili"
             h_inf = " | ".join(contesto["h_infortunati"]) if contesto["h_infortunati"] else "Nessuna info"
             a_inf = " | ".join(contesto["a_infortunati"]) if contesto["a_infortunati"] else "Nessuna info"
             h_infra = ", ".join(contesto.get("h_infraset", [])) or "Nessuna"
@@ -444,7 +446,9 @@ REGOLE PRONOSTICI:
 - PRONOSTICO ALLETTANTE: mercato con buon potenziale basato su un' osservazione tattica specifica. Puo' essere un esito meno probabile ma ben motivato dai dati.
 - Se una squadra ha giocato infrasettimanale in Europa, quella squadra e' potenzialmente stanca. La stanchezza PENALIZZA quella squadra, non la avvantaggia. Esempio: se l'Atalanta ha giocato ieri in Champions, l'Atalanta potrebbe rendere peggio, non meglio.
 - NON suggerire Over 1.5 come pronostico, quasi sempre value negativo.
-- NON ripetere lo stesso mercato in sicuro e allettante.
+- NON ripetere lo stesso mercato tra sicuro e top 3.
+- Distinzione importante: Over 2.5 = almeno 3 gol totali (include 3-0, 2-1, 1-2, ecc.). GG = entrambe le squadre segnano almeno 1 gol (include 1-1, 2-1, 1-2, ma NON 3-0 o 2-0). Sono mercati diversi: una partita puo' essere Over 2.5 senza GG (es. 3-0) o GG senza Over 2.5 (es. 1-1). Quando li menzioni, spiega sempre quale scenario concreto stai ipotizzando.
+- Quando dici "risultati recenti", indica il numero esatto di partite disponibili, non assumere sempre che siano 5.
 
 STRUTTURA (italiano, tono diretto e analitico, senza fronzoli):
 
