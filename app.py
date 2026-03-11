@@ -186,7 +186,7 @@ def get_contesto_partita(h, a, camp_sel):
     if a_id:
         contesto["a_risultati"] = get_ultimi_risultati_fd(a_id, camp_sel)
 
-    # Infortunati via DuckDuckGo (testo mirato)
+    # Infortunati + partite infrasettimanali via DuckDuckGo
     try:
         with DDGS() as ddgs:
             for r in ddgs.text(f"{h} infortunati squalificati {camp_sel} 2026", max_results=2):
@@ -195,6 +195,46 @@ def get_contesto_partita(h, a, camp_sel):
                 contesto["a_infortunati"].append(r["body"][:300])
     except:
         pass
+
+    # Partite infrasettimanali (Champions, Europa League, Coppa Italia ecc.)
+    contesto["h_infraset"] = []
+    contesto["a_infraset"] = []
+    if h_id:
+        try:
+            r = requests.get(
+                f"https://api.football-data.org/v4/teams/{h_id}/matches",
+                headers={"X-Auth-Token": API_KEY_DATA},
+                params={"status": "FINISHED", "limit": 3}
+            )
+            for match in r.json().get("matches", [])[-3:]:
+                comp_name = match.get("competition", {}).get("name", "")
+                l_map2 = {"Serie A": "SA", "Premier League": "PL", "La Liga": "PD", "Bundesliga": "BL1"}
+                if comp_name and match.get("competition", {}).get("code", "") != l_map2.get(camp_sel, "SA"):
+                    home = match["homeTeam"].get("shortName") or match["homeTeam"].get("name", "?")
+                    away = match["awayTeam"].get("shortName") or match["awayTeam"].get("name", "?")
+                    gh = match["score"]["fullTime"].get("home", "?")
+                    ga = match["score"]["fullTime"].get("away", "?")
+                    contesto["h_infraset"].append(f"{comp_name}: {home} {gh}-{ga} {away}")
+        except:
+            pass
+    if a_id:
+        try:
+            r = requests.get(
+                f"https://api.football-data.org/v4/teams/{a_id}/matches",
+                headers={"X-Auth-Token": API_KEY_DATA},
+                params={"status": "FINISHED", "limit": 3}
+            )
+            for match in r.json().get("matches", [])[-3:]:
+                comp_name = match.get("competition", {}).get("name", "")
+                l_map2 = {"Serie A": "SA", "Premier League": "PL", "La Liga": "PD", "Bundesliga": "BL1"}
+                if comp_name and match.get("competition", {}).get("code", "") != l_map2.get(camp_sel, "SA"):
+                    home = match["homeTeam"].get("shortName") or match["homeTeam"].get("name", "?")
+                    away = match["awayTeam"].get("shortName") or match["awayTeam"].get("name", "?")
+                    gh = match["score"]["fullTime"].get("home", "?")
+                    ga = match["score"]["fullTime"].get("away", "?")
+                    contesto["a_infraset"].append(f"{comp_name}: {home} {gh}-{ga} {away}")
+        except:
+            pass
 
     return contesto
 
@@ -299,56 +339,72 @@ CLASSIFICA ATTUALE:
         else:
             class_str = ""
 
-        # Risultati recenti e infortunati
+        # Risultati recenti, infortunati e infrasettimanali
         if contesto:
             h_ris = ", ".join(contesto["h_risultati"]) if contesto["h_risultati"] else "Non disponibili"
             a_ris = ", ".join(contesto["a_risultati"]) if contesto["a_risultati"] else "Non disponibili"
             h_inf = " | ".join(contesto["h_infortunati"]) if contesto["h_infortunati"] else "Nessuna info"
             a_inf = " | ".join(contesto["a_infortunati"]) if contesto["a_infortunati"] else "Nessuna info"
+            h_infra = ", ".join(contesto.get("h_infraset", [])) or "Nessuna partita infrasettimanale recente"
+            a_infra = ", ".join(contesto.get("a_infraset", [])) or "Nessuna partita infrasettimanale recente"
             dati_reali = f"""
-RISULTATI RECENTI:
+RISULTATI RECENTI IN CAMPIONATO:
 - Ultime 5 partite {h}: {h_ris}
 - Ultime 5 partite {a}: {a_ris}
+PARTITE INFRASETTIMANALI (altre competizioni, possibile stanchezza):
+- {h}: {h_infra}
+- {a}: {a_infra}
 NOTIZIE INDISPONIBILI:
 - {h}: {h_inf}
 - {a}: {a_inf}"""
         else:
             dati_reali = f"CONTESTO WEB: {news_extra}"
 
-        prompt = f"""Sei Billy Walters, il leggendario analista sportivo. Analizza {h} vs {a}.
+        prompt = f"""Sei Billy Walters, il leggendario analista sportivo con 40 anni di esperienza. Analizza {h} vs {a}.
 
-{quote_str}
 {class_str}
 {dati_reali}
 
-REGOLE FONDAMENTALI PER I PRONOSTICI:
-- Il PRONOSTICO SICURO deve avere OBBLIGATORIAMENTE probabilita' >= 45%. Non puoi mai suggerire come pronostico sicuro un evento con probabilita' inferiore al 45%, anche se il value e' positivo. Tra i mercati con prob >= 45%, scegli quello con il miglior value o la quota piu' alta.
-- Il PRONOSTICO ALLETTANTE preferisce Over 2.5, GG o Under 2.5 con value positivo rispetto a vittorie con probabilita' inferiore al 30%. Una vittoria al 18% NON e' mai un buon pronostico allettante se esistono mercati Over/GG con value piu' alto o simile.
-- Evita di suggerire Over 1.5 come pronostico sicuro se il value e' negativo o la quota e' sotto 1.30.
-- Se nessun mercato ha prob >= 45% e value positivo, scegli quello con prob piu' alta tra i disponibili e segnala la limitazione.
-- Se le quote non sono disponibili, ragiona sulla probabilita' assoluta: sicuro >= 55%, allettante 25-54%.
+DATI STATISTICI MODELLO POISSON (supporto quantitativo, non fonte primaria):
+- Prob vittoria {h}: {p1:.0%} | Pareggio: {pX:.0%} | Vittoria {a}: {p2:.0%}
+- Over 1.5: {po15:.0%} | Over 2.5: {po25:.0%} | GG: {pgg:.0%}
 
-STRUTTURA L'ANALISI COSI' (italiano, tono deciso e analitico):
+{quote_str}
+
+IL TUO METODO DI ANALISI - SEGUI QUESTO ORDINE RIGOROSO:
+1. Prima leggi i dati reali: classifica, risultati recenti, infrasettimanali, indisponibili
+2. Costruisci un giudizio sulla partita basato sui dati, NON sulle quote
+3. Solo alla fine usa le quote per valutare se c'e' value sulla tua conclusione
+4. Le quote sono uno strumento di verifica, non il punto di partenza
+
+REGOLE PRONOSTICI:
+- PRONOSTICO SICURO: il mercato piu' probabile basato sull'analisi dei dati, con prob >= 45%. Se Over 2.5 non e' supportato dai dati (squadre che difendono, pochi gol recenti), NON suggerirlo solo perche' la quota sembra ok.
+- PRONOSTICO ALLETTANTE: mercato con buon potenziale basato su un' osservazione tattica specifica. Puo' essere un esito meno probabile ma ben motivato dai dati.
+- Se una squadra ha giocato infrasettimanale in Europa, valuta concretamente l'impatto sulla freschezza fisica.
+- NON suggerire Over 1.5 come pronostico, quasi sempre value negativo.
+- NON ripetere lo stesso mercato in sicuro e allettante.
+
+STRUTTURA (italiano, tono diretto e analitico, senza fronzoli):
 
 STATO DI FORMA
-Analizza i risultati reali delle ultime 5 partite. Commenta vittorie, pareggi, sconfitte, trend. Usa la classifica per contestualizzare la posizione e i punti delle due squadre.
+Risultati reali ultimi 5, trend, posizione classifica, punti. Se una squadra ha giocato infrasettimanale commentane l'impatto.
 
 ANALISI TATTICA
-Punti di forza e debolezza di ciascuna squadra basati sui dati reali. Commenta gli indisponibili. Analizza la solidita' difensiva (GS) e la capacita' offensiva (GF) dalla classifica.
+Forza offensiva (GF) e difensiva (GS) dai dati reali. Indisponibili e loro impatto concreto. Confronto tra le due squadre.
 
 RAGIONAMENTO VERSO IL PRONOSTICO
-Discorsivo: come i dati reali, la classifica e il value delle quote ti portano alla conclusione. I dati Poisson sono supporto, non fonte unica.
+Parti dai dati, non dalle quote. Spiega cosa ti dicono i risultati recenti, la classifica e la condizione fisica. Le probabilita' Poisson confermano o contraddicono?
 
 PRONOSTICO SICURO
-Mercato con miglior value o minor rischio. Formato: "Mercato - prob X% - quota Y - value Z% - motivazione"
+Formato: "Mercato - prob X% - quota Y - value Z% - motivazione basata sui dati"
 
 PRONOSTICO ALLETTANTE (PIU' RISCHIOSO)
-Mercato con quota interessante e buon value potenziale. Stesso formato.
+Formato: "Mercato - prob X% - quota Y - value Z% - motivazione basata su un'osservazione tattica specifica"
 
 LIVELLO DI CONFIDENZA COMPLESSIVO
-Voto 1-10 con motivazione. Considera qualita' e quantita' dei dati disponibili.
+Voto 1-10. Motiva in base alla qualita' e coerenza dei dati disponibili.
 
-IMPORTANTE: Usa SOLO dati forniti. Non inventare statistiche o nomi."""
+IMPORTANTE: Usa SOLO i dati forniti. Non inventare risultati, nomi o statistiche."""
 
         try:
             res = groq_client.chat.completions.create(
