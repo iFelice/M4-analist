@@ -24,15 +24,18 @@ jobs:
           python-version: '3.11'
 
       - name: Installa dipendenze
-        run: pip install requests pandas
+        run: pip install requests pandas lxml html5lib beautifulsoup4
 
       - name: Esegui update_db.py
         run: python update_db.py
+
+      - name: Esegui update_xg.py
+        run: python update_xg.py
 
       - name: Commit e push aggiornamenti
         run: |
           git config --global user.name "M4 Bot"
           git config --global user.email "bot@m4analist.com"
-          git add database/*_Live.csv
+          git add database/*_Live.csv database/xg_*.json
           git diff --staged --quiet || git commit -m "Auto-update database $(date +'%d/%m/%Y')"
           git push
