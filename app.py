@@ -135,6 +135,84 @@ def get_full_poisson(h_e, a_e):
             "u15": get_u(1.5), "u25": get_u(2.5), "u35": get_u(3.5), "gg": (1-h_p[0])*(1-a_p[0])}
 
 
+# --- STRATO INTERMEDIO: SEGNALI NUMERICI CONTESTUALI ---
+def calcola_segnali(risultati, infraset_giocate, infraset_programmate, stand):
+    """
+    Calcola moltiplicatori da applicare ai gol attesi prima del Poisson.
+    Ritorna (mult_att, mult_def, nota) dove:
+      mult_att: corregge i gol attesi in attacco (>1 = squadra piu' in forma)
+      mult_def: corregge i gol concessi (>1 = difesa piu' permeabile)
+      nota: stringa con i segnali attivi per il prompt
+    """
+    mult_att = 1.0
+    mult_def = 1.0
+    note = []
+
+    # --- FORMA RECENTE (ultimi 5 risultati) ---
+    # Ogni risultato e' tipo "Roma 2-1 Juve (V)" o "(P)" o "(X)"
+    score_forma = 0
+    n_ris = 0
+    for r in risultati:
+        if r.endswith("(V)"):
+            score_forma += 1; n_ris += 1
+        elif r.endswith("(P)"):
+            score_forma -= 1; n_ris += 1
+        elif r.endswith("(X)"):
+            n_ris += 1
+    if n_ris > 0:
+        # Normalizza: da [-1,+1] a moltiplicatore [0.92, 1.08]
+        forma_norm = score_forma / n_ris  # tra -1 e +1
+        delta_att = forma_norm * 0.08
+        delta_def = -forma_norm * 0.05  # buona forma = difesa piu' solida
+        mult_att += delta_att
+        mult_def += delta_def
+        if forma_norm > 0.3:
+            note.append(f"forma positiva (+{score_forma}/{n_ris}): att +{delta_att:.0%}")
+        elif forma_norm < -0.3:
+            note.append(f"forma negativa ({score_forma}/{n_ris}): att {delta_att:.0%}")
+
+    # --- STANCHEZZA INFRASETTIMANALE ---
+    # Partita giocata = stanchezza accumulata
+    if infraset_giocate:
+        mult_att -= 0.04   # meno lucidita' offensiva
+        mult_def += 0.06   # difesa piu' permeabile per stanchezza
+        note.append(f"stanchezza ({len(infraset_giocate)} partita/e infraset.): att -4%, def +6%")
+    # Partita in programma prima della gara = possibile turnover
+    if infraset_programmate:
+        mult_att -= 0.02
+        note.append(f"impegno infraset. in programma: possibile turnover att -2%")
+
+    # --- POSIZIONE IN CLASSIFICA ---
+    if stand:
+        pos = stand.get("pos", 10)
+        pg = stand.get("pg", 1)
+        gf = stand.get("gf", 0)
+        gs = stand.get("gs", 1)
+        # Rapporto gol: squadre che segnano molto tendono a segnare ancora
+        ratio_gol = (gf / pg) if pg > 0 else 1.0
+        if ratio_gol > 1.8:
+            mult_att += 0.03
+            note.append(f"prolifica ({gf} GF in {pg} pg): att +3%")
+        elif ratio_gol < 0.9:
+            mult_att -= 0.03
+            note.append(f"poco prolifica ({gf} GF in {pg} pg): att -3%")
+        # Difesa: squadre con pochi gol subiti
+        ratio_gs = (gs / pg) if pg > 0 else 1.0
+        if ratio_gs < 0.8:
+            mult_def -= 0.04
+            note.append(f"difesa solida ({gs} GS in {pg} pg): def -4%")
+        elif ratio_gs > 1.5:
+            mult_def += 0.04
+            note.append(f"difesa permeabile ({gs} GS in {pg} pg): def +4%")
+
+    # Clamp per sicurezza
+    mult_att = max(0.80, min(1.20, mult_att))
+    mult_def = max(0.80, min(1.20, mult_def))
+
+    nota_str = " | ".join(note) if note else "nessun segnale contestuale significativo"
+    return mult_att, mult_def, nota_str
+
+
 # --- DATI CONTESTUALI DA FOOTBALL-DATA.ORG ---
 def get_team_fd_id(team_name, camp_sel):
     """Trova l'ID squadra su football-data.org dalla lista partite in sessione"""
@@ -314,12 +392,54 @@ def show_details(h, a, m, camp_sel="Serie A"):
         except:
             news_extra = ""
 
-        p1 = m['1']
-        pX = m['X']
-        p2 = m['2']
-        po25 = 1 - m['u25']
-        po15 = 1 - m['u15']
-        pgg = m['gg']
+        # --- STRATO INTERMEDIO: correggi gol attesi con segnali contestuali ---
+        classifica_sess = st.session_state.get("classifica", {})
+        h_cl_key = clean_name(h)
+        a_cl_key = clean_name(a)
+        h_stand_s = classifica_sess.get(h_cl_key, {})
+        a_stand_s = classifica_sess.get(a_cl_key, {})
+
+        h_mult_att, h_mult_def, h_note_seg = calcola_segnali(
+            contesto.get("h_risultati", []) if contesto else [],
+            contesto.get("h_infraset", []) if contesto else [],
+            contesto.get("h_infraset_prog", []) if contesto else [],
+            h_stand_s
+        )
+        a_mult_att, a_mult_def, a_note_seg = calcola_segnali(
+            contesto.get("a_risultati", []) if contesto else [],
+            contesto.get("a_infraset", []) if contesto else [],
+            contesto.get("a_infraset_prog", []) if contesto else [],
+            a_stand_s
+        )
+
+        # Recupera stats squadre dall'engine
+        engine_data = get_league_engine(camp_sel)
+        if engine_data:
+            team_stats_p, avg_h_p, avg_a_p, _ = engine_data
+            h_s_p = team_stats_p.get(h_cl_key, {"att": 0.85, "def": 1.15})
+            a_s_p = team_stats_p.get(a_cl_key, {"att": 0.85, "def": 1.15})
+            # Applica moltiplicatori segnali ai gol attesi
+            h_exp = h_s_p["att"] * h_mult_att * a_s_p["def"] * a_mult_def * avg_h_p
+            a_exp = a_s_p["att"] * a_mult_att * h_s_p["def"] * h_mult_def * avg_a_p
+        else:
+            h_exp = 1.3
+            a_exp = 1.1
+
+        # Ricalcola Poisson con gol attesi corretti
+        m_adj = get_full_poisson(h_exp, a_exp)
+
+        p1 = m_adj['1']
+        pX = m_adj['X']
+        p2 = m_adj['2']
+        po25 = 1 - m_adj['u25']
+        po15 = 1 - m_adj['u15']
+        pgg = m_adj['gg']
+
+        segnali_str = f"""
+SEGNALI CONTESTUALI APPLICATI AL MODELLO:
+- {h}: {h_note_seg} → gol attesi attacco x{h_mult_att:.2f}, difesa x{h_mult_def:.2f}
+- {a}: {a_note_seg} → gol attesi attacco x{a_mult_att:.2f}, difesa x{a_mult_def:.2f}
+- Gol attesi corretti: {h} {h_exp:.2f} | {a} {a_exp:.2f}"""
 
         # Quote bookmaker dalla sessione
         q1, qX, q2 = 0.0, 0.0, 0.0
@@ -428,10 +548,12 @@ NOTIZIE INDISPONIBILI:
 
 {class_str}
 {dati_reali}
+{segnali_str}
 
-DATI STATISTICI MODELLO POISSON (supporto quantitativo, non fonte primaria):
+PROBABILITA' FINALI MODELLO (Poisson corretto con segnali contestuali):
 - Prob vittoria {h}: {p1:.0%} | Pareggio: {pX:.0%} | Vittoria {a}: {p2:.0%}
 - Over 1.5: {po15:.0%} | Over 2.5: {po25:.0%} | GG: {pgg:.0%}
+(Queste probabilita' incorporano gia' forma, stanchezza e dati stagionali - usale come punto di partenza affidabile)
 
 {quote_str}
 
@@ -633,7 +755,11 @@ if 'live_data' in st.session_state and engine and g_sel is not None:
 
         h_s = team_stats.get(h_cl, {'att': 0.85, 'def': 1.15})
         a_s = team_stats.get(a_cl, {'att': 0.85, 'def': 1.15})
-        m = get_full_poisson(h_s['att'] * a_s['def'] * avg_h, a_s['att'] * h_s['def'] * avg_a)
+        # Gol attesi base
+        h_exp_base = h_s['att'] * a_s['def'] * avg_h
+        a_exp_base = a_s['att'] * h_s['def'] * avg_a
+        # Nessun contesto disponibile nella card - Poisson puro
+        m = get_full_poisson(h_exp_base, a_exp_base)
 
         with st.container():
             st.markdown('<div class="match-card">', unsafe_allow_html=True)
