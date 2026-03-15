@@ -591,10 +591,13 @@ Elenca i 3 risultati piu' probabili con la loro percentuale. Per ciascuno scrivi
 Es: "1-0 (12%) → vittoria {h}, NG, Under 2.5"
 
 PRONOSTICO SICURO
-Mercato piu' probabile con prob >= 45%. Formato: "Mercato - prob X% - motivazione"
+Il mercato con la probabilita' piu' alta tra TUTTI i mercati disponibili: 1X2, Under 2.5, Over 2.5, GG, NG.
+Non privilegiare automaticamente gli esiti 1X2 — se Under 2.5 ha probabilita' piu' alta della vittoria, Under 2.5 e' il pronostico sicuro.
+Formato: "Mercato - prob X% - motivazione basata sui dati"
 
 TOP 3 MERCATI ALTERNATIVI
-I 3 mercati successivi per probabilita'. Formato: "N. Mercato - prob X% - motivazione"
+I 3 mercati con probabilita' piu' alta dopo il pronostico sicuro, in ordine decrescente.
+Formato: "N. Mercato - prob X% - motivazione"
 
 LIVELLO DI CONFIDENZA
 Voto 1-10 con motivazione breve.
