@@ -644,6 +644,16 @@ with st.sidebar:
     st.title("🎩 Billy Walters Chat")
     camp_sel = st.selectbox("CAMPIONATO", ["Serie A", "Premier League", "La Liga", "Bundesliga"])
 
+    # Status xG
+    try:
+        xg_check = get_understat_xg(camp_sel)
+        if xg_check and len(xg_check) > 0:
+            st.markdown(f"<div style='font-size:12px; color:#28a745; font-weight:700;'>✅ xG caricati ({len(xg_check)} squadre)</div>", unsafe_allow_html=True)
+        else:
+            st.markdown("<div style='font-size:12px; color:#dc3545; font-weight:700;'>⚠️ xG non disponibili — uso medie gol storiche</div>", unsafe_allow_html=True)
+    except Exception as xg_err:
+        st.markdown(f"<div style='font-size:12px; color:#dc3545; font-weight:700;'>⚠️ xG errore: {str(xg_err)[:60]}</div>", unsafe_allow_html=True)
+
     # Sincronizza solo se non ci sono dati per questo campionato, oppure se l'utente preme Refresh
     camp_cached = st.session_state.get("live_camp", None)
     has_data = "live_data" in st.session_state and st.session_state.live_data and camp_cached == camp_sel
