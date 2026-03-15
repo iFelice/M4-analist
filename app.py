@@ -435,8 +435,13 @@ def show_details(h, a, m, camp_sel="Serie A"):
         po15 = 1 - m_adj['u15']
         pgg = m_adj['gg']
 
+        # Verifica se xG sono disponibili
+        xg_data_check = get_understat_xg(camp_sel)
+        xg_status = f"xG Understat attivi ({len(xg_data_check)} squadre)" if xg_data_check else "xG NON disponibili - modello usa medie gol storiche (meno preciso)"
+
         segnali_str = f"""
 SEGNALI CONTESTUALI APPLICATI AL MODELLO:
+- Fonte dati offensivi: {xg_status}
 - {h}: {h_note_seg} → gol attesi attacco x{h_mult_att:.2f}, difesa x{h_mult_def:.2f}
 - {a}: {a_note_seg} → gol attesi attacco x{a_mult_att:.2f}, difesa x{a_mult_def:.2f}
 - Gol attesi corretti: {h} {h_exp:.2f} | {a} {a_exp:.2f}"""
@@ -564,10 +569,10 @@ IL TUO METODO DI ANALISI - SEGUI QUESTO ORDINE RIGOROSO:
 4. Le quote sono uno strumento di verifica, non il punto di partenza
 
 REGOLE PRONOSTICI:
-- PRONOSTICO SICURO: il mercato piu' probabile basato sull'analisi dei dati, con prob >= 45%. Se Over 2.5 non e' supportato dai dati (squadre che difendono, pochi gol recenti), NON suggerirlo solo perche' la quota sembra ok.
+- PRONOSTICO SICURO: OBBLIGATORIAMENTE prob >= 45%. Se nessun mercato supera il 45%, scrivi esplicitamente "Nessun pronostico sicuro disponibile - partita troppo equilibrata" e NON forzare una scelta. Non chiamare mai "sicuro" un mercato sotto il 45%.
 - PRONOSTICO ALLETTANTE: mercato con buon potenziale basato su un' osservazione tattica specifica. Puo' essere un esito meno probabile ma ben motivato dai dati.
 - Se una squadra ha giocato infrasettimanale in Europa, quella squadra e' potenzialmente stanca. La stanchezza PENALIZZA quella squadra, non la avvantaggia. Esempio: se l'Atalanta ha giocato ieri in Champions, l'Atalanta potrebbe rendere peggio, non meglio.
-- NON suggerire Over 1.5 come pronostico, quasi sempre value negativo.
+- NON inserire mai Over 1.5 nei pronostici ne' nel Top 3, nemmeno "per completezza". E' inutile e rumoroso.
 - NON ripetere lo stesso mercato tra sicuro e top 3.
 - Distinzione importante: Over 2.5 = almeno 3 gol totali (include 3-0, 2-1, 1-2, ecc.). GG = entrambe le squadre segnano almeno 1 gol (include 1-1, 2-1, 1-2, ma NON 3-0 o 2-0). Sono mercati diversi: una partita puo' essere Over 2.5 senza GG (es. 3-0) o GG senza Over 2.5 (es. 1-1). Quando li menzioni, spiega sempre quale scenario concreto stai ipotizzando.
 - Quando dici "risultati recenti", indica il numero esatto di partite disponibili, non assumere sempre che siano 5.
