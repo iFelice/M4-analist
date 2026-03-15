@@ -570,10 +570,10 @@ RISULTATI PIU' PROBABILI (modello Poisson, top 6):
 
 REGOLE:
 - La stanchezza PENALIZZA la squadra che ha giocato infrasettimanale.
-- Over 2.5 = 3+ gol totali (es. 2-1, 3-0). GG = entrambe segnano (es. 1-1, 2-1). Sono mercati diversi.
+- Over 2.5 = 3+ gol totali (es. 2-1, 3-0). GG = entrambe segnano (es. 1-1, 2-1). NON sono sinonimi.
 - NON menzionare mai Over 1.5.
 - Indica sempre il numero esatto di partite disponibili nei risultati recenti.
-- PRONOSTICO SICURO: prob >= 45% obbligatoria. Se nessun mercato supera il 45%, scrivi "Partita troppo equilibrata - nessun pronostico sicuro".
+- Il PRONOSTICO SICURO deve emergere naturalmente dai dati: xG, forma, classifica, indisponibili, infrasettimanali. Non esiste una soglia minima di probabilita' — se i dati indicano chiaramente un esito, dillo. Se la partita e' davvero equilibrata su tutti i fronti, dillo onestamente. Non forzare mai un pronostico che i dati non supportano.
 
 STRUTTURA (italiano, tono diretto, senza fronzoli):
 
