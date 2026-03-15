@@ -30,12 +30,14 @@ jobs:
         run: python update_db.py
 
       - name: Esegui update_xg.py
+        continue-on-error: true
         run: python update_xg.py
 
       - name: Commit e push aggiornamenti
         run: |
           git config --global user.name "M4 Bot"
           git config --global user.email "bot@m4analist.com"
-          git add database/*_Live.csv database/xg_*.json
+          git add database/*_Live.csv
+          git add database/xg_*.json 2>/dev/null || true
           git diff --staged --quiet || git commit -m "Auto-update database $(date +'%d/%m/%Y')"
           git push
