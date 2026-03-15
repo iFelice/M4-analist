@@ -437,14 +437,24 @@ def show_details(h, a, m, camp_sel="Serie A"):
 
         # Verifica se xG sono disponibili
         xg_data_check = get_understat_xg(camp_sel)
-        xg_status = f"xG Understat attivi ({len(xg_data_check)} squadre)" if xg_data_check else "xG NON disponibili - modello usa medie gol storiche (meno preciso)"
+        xg_status = f"xG attivi ({len(xg_data_check)} squadre)" if xg_data_check else "xG non disponibili - uso medie storiche"
 
         segnali_str = f"""
 SEGNALI CONTESTUALI APPLICATI AL MODELLO:
 - Fonte dati offensivi: {xg_status}
-- {h}: {h_note_seg} → gol attesi attacco x{h_mult_att:.2f}, difesa x{h_mult_def:.2f}
-- {a}: {a_note_seg} → gol attesi attacco x{a_mult_att:.2f}, difesa x{a_mult_def:.2f}
-- Gol attesi corretti: {h} {h_exp:.2f} | {a} {a_exp:.2f}"""
+- {h}: {h_note_seg} → gol attesi {h_exp:.2f}
+- {a}: {a_note_seg} → gol attesi {a_exp:.2f}"""
+
+        # Calcola top 6 risultati più probabili dalla matrice Poisson
+        h_p = [poisson.pmf(i, h_exp) for i in range(8)]
+        a_p = [poisson.pmf(i, a_exp) for i in range(8)]
+        score_probs = []
+        for i in range(6):
+            for j in range(6):
+                score_probs.append((i, j, h_p[i] * a_p[j]))
+        score_probs.sort(key=lambda x: x[2], reverse=True)
+        top_scores = score_probs[:6]
+        risultati_str = "\n".join([f"  {h} {g[0]}-{g[1]} {a}: {g[2]:.1%}" for g in top_scores])
 
         # Quote bookmaker dalla sessione
         q1, qX, q2 = 0.0, 0.0, 0.0
@@ -496,16 +506,10 @@ SEGNALI CONTESTUALI APPLICATI AL MODELLO:
         vgg  = value(pgg,  qgg)
         vng  = value(1-pgg, qng)
 
-        has_quotes = q1 > 0
         quote_str = f"""
-QUOTE BOOKMAKER E VALUE (value = prob_modello x quota - 1):
-- 1 ({h}): quota {q1 or "n/d"} | prob {p1:.0%} | value {fmt_value(v1)}
-- X: quota {qX or "n/d"} | prob {pX:.0%} | value {fmt_value(vX)}
-- 2 ({a}): quota {q2 or "n/d"} | prob {p2:.0%} | value {fmt_value(v2)}
-- Over 2.5: quota {qo25 or "n/d"} | prob {po25:.0%} | value {fmt_value(vo25)}
-- Under 2.5: quota {qu25 or "n/d"} | prob {1-po25:.0%} | value {fmt_value(vu25)}
-- GG (entrambe segnano): prob {pgg:.0%} (quota bookmaker non disponibile)
-- Over 1.5: prob {po15:.0%} (quota solitamente bassa, quasi sempre value negativo)"""
+QUOTE BOOKMAKER (solo riferimento):
+- 1 ({h}): {q1 or "n/d"} | X: {qX or "n/d"} | 2 ({a}): {q2 or "n/d"}
+- Over 2.5: {qo25 or "n/d"}"""
 
         # Classifica
         classifica = st.session_state.get("classifica", {})
@@ -555,51 +559,47 @@ NOTIZIE INDISPONIBILI:
 {dati_reali}
 {segnali_str}
 
-PROBABILITA' FINALI MODELLO (Poisson corretto con segnali contestuali):
-- Prob vittoria {h}: {p1:.0%} | Pareggio: {pX:.0%} | Vittoria {a}: {p2:.0%}
-- Over 1.5: {po15:.0%} | Over 2.5: {po25:.0%} | GG: {pgg:.0%}
-(Queste probabilita' incorporano gia' forma, stanchezza e dati stagionali - usale come punto di partenza affidabile)
+PROBABILITA' MODELLO POISSON (corrette per forma, stanchezza, xG):
+- Vittoria {h}: {p1:.0%} | Pareggio: {pX:.0%} | Vittoria {a}: {p2:.0%}
+- Over 2.5: {po25:.0%} | Under 2.5: {1-po25:.0%} | GG: {pgg:.0%} | NG: {1-pgg:.0%}
+
+RISULTATI PIU' PROBABILI (modello Poisson, top 6):
+{risultati_str}
 
 {quote_str}
 
-IL TUO METODO DI ANALISI - SEGUI QUESTO ORDINE RIGOROSO:
-1. Prima leggi i dati reali: classifica, risultati recenti, infrasettimanali, indisponibili
-2. Costruisci un giudizio sulla partita basato sui dati, NON sulle quote
-3. Solo alla fine usa le quote per valutare se c'e' value sulla tua conclusione
-4. Le quote sono uno strumento di verifica, non il punto di partenza
+REGOLE:
+- La stanchezza PENALIZZA la squadra che ha giocato infrasettimanale.
+- Over 2.5 = 3+ gol totali (es. 2-1, 3-0). GG = entrambe segnano (es. 1-1, 2-1). Sono mercati diversi.
+- NON menzionare mai Over 1.5.
+- Indica sempre il numero esatto di partite disponibili nei risultati recenti.
+- PRONOSTICO SICURO: prob >= 45% obbligatoria. Se nessun mercato supera il 45%, scrivi "Partita troppo equilibrata - nessun pronostico sicuro".
 
-REGOLE PRONOSTICI:
-- PRONOSTICO SICURO: OBBLIGATORIAMENTE prob >= 45%. Se nessun mercato supera il 45%, scrivi esplicitamente "Nessun pronostico sicuro disponibile - partita troppo equilibrata" e NON forzare una scelta. Non chiamare mai "sicuro" un mercato sotto il 45%.
-- PRONOSTICO ALLETTANTE: mercato con buon potenziale basato su un' osservazione tattica specifica. Puo' essere un esito meno probabile ma ben motivato dai dati.
-- Se una squadra ha giocato infrasettimanale in Europa, quella squadra e' potenzialmente stanca. La stanchezza PENALIZZA quella squadra, non la avvantaggia. Esempio: se l'Atalanta ha giocato ieri in Champions, l'Atalanta potrebbe rendere peggio, non meglio.
-- NON inserire mai Over 1.5 nei pronostici ne' nel Top 3, nemmeno "per completezza". E' inutile e rumoroso.
-- NON ripetere lo stesso mercato tra sicuro e top 3.
-- Distinzione importante: Over 2.5 = almeno 3 gol totali (include 3-0, 2-1, 1-2, ecc.). GG = entrambe le squadre segnano almeno 1 gol (include 1-1, 2-1, 1-2, ma NON 3-0 o 2-0). Sono mercati diversi: una partita puo' essere Over 2.5 senza GG (es. 3-0) o GG senza Over 2.5 (es. 1-1). Quando li menzioni, spiega sempre quale scenario concreto stai ipotizzando.
-- Quando dici "risultati recenti", indica il numero esatto di partite disponibili, non assumere sempre che siano 5.
-
-STRUTTURA (italiano, tono diretto e analitico, senza fronzoli):
+STRUTTURA (italiano, tono diretto, senza fronzoli):
 
 STATO DI FORMA
-Risultati reali ultimi 5, trend, posizione classifica, punti. Se una squadra ha giocato infrasettimanale commentane l'impatto.
+Risultati recenti, trend, classifica, impatto infrasettimanali.
 
 ANALISI TATTICA
-Forza offensiva (GF) e difensiva (GS) dai dati reali. Indisponibili e loro impatto concreto. Confronto tra le due squadre.
+GF/GS stagionali, indisponibili e impatto concreto sul match.
 
-RAGIONAMENTO VERSO IL PRONOSTICO
-Parti dai dati, non dalle quote. Spiega cosa ti dicono i risultati recenti, la classifica e la condizione fisica. Le probabilita' Poisson confermano o contraddicono?
+RAGIONAMENTO
+Dai dati al pronostico. Le probabilita' Poisson confermano o contraddicono i dati reali?
+
+RISULTATI ATTESI
+Elenca i 3 risultati piu' probabili con la loro percentuale. Per ciascuno scrivi i mercati implicati.
+Es: "1-0 (12%) → vittoria {h}, NG, Under 2.5"
 
 PRONOSTICO SICURO
-Formato: "Mercato - prob X% - quota Y - value Z% - motivazione basata sui dati"
+Mercato piu' probabile con prob >= 45%. Formato: "Mercato - prob X% - motivazione"
 
-TOP 3 MERCATI ALTERNATIVI (in ordine di probabilita' decrescente)
-Elenca i 3 mercati piu' probabili diversi dal pronostico sicuro, dal piu' al meno probabile.
-Per ciascuno: "N. Mercato - prob X% - quota Y - value Z% - una riga di motivazione"
-Includi sia esiti 1X2 che Over/Under/GG se rilevanti. Sii conciso.
+TOP 3 MERCATI ALTERNATIVI
+I 3 mercati successivi per probabilita'. Formato: "N. Mercato - prob X% - motivazione"
 
-LIVELLO DI CONFIDENZA COMPLESSIVO
-Voto 1-10. Motiva in base alla qualita' e coerenza dei dati disponibili.
+LIVELLO DI CONFIDENZA
+Voto 1-10 con motivazione breve.
 
-IMPORTANTE: Usa SOLO i dati forniti. Non inventare risultati, nomi o statistiche."""
+IMPORTANTE: Usa SOLO i dati forniti."""
 
         try:
             res = groq_client.chat.completions.create(
@@ -611,7 +611,7 @@ IMPORTANTE: Usa SOLO i dati forniti. Non inventare risultati, nomi o statistiche
             # Rendering con sezioni in evidenza
             righe = testo.split("\n")
             html = ""
-            sezioni = ["STATO DI FORMA", "ANALISI TATTICA", "RAGIONAMENTO VERSO IL PRONOSTICO",
+            sezioni = ["STATO DI FORMA", "ANALISI TATTICA", "RAGIONAMENTO", "RISULTATI ATTESI",
                        "PRONOSTICO SICURO", "TOP 3 MERCATI", "LIVELLO DI CONFIDENZA"]
             for riga in righe:
                 riga_strip = riga.strip()
