@@ -1,4 +1,5 @@
 import streamlit as st
+import json
 import pandas as pd
 import numpy as np
 import os, requests, glob, re
@@ -52,6 +53,126 @@ st.markdown(f"""
     [data-testid="stVerticalBlock"] > div {{ gap: 0rem !important; }}
     </style>
     """, unsafe_allow_html=True)
+
+# --- REGISTRO PREDIZIONI ---
+PREDICTIONS_FILE = "database/predictions.json"
+
+def load_predictions():
+    if os.path.exists(PREDICTIONS_FILE):
+        try:
+            with open(PREDICTIONS_FILE, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except:
+            return []
+    return []
+
+def save_predictions(preds):
+    os.makedirs("database", exist_ok=True)
+    with open(PREDICTIONS_FILE, "w", encoding="utf-8") as f:
+        json.dump(preds, f, ensure_ascii=False, indent=2)
+
+def save_prediction_entry(h, a, camp, giornata, match_date, pronostico_sicuro, top3, prob_sicuro, risultati_attesi):
+    """Salva una nuova predizione se non esiste già per questa partita."""
+    preds = load_predictions()
+    key = f"{h}_{a}_{giornata}_{camp}"
+    for p in preds:
+        if p.get("key") == key:
+            return  # già salvata
+    preds.append({
+        "key": key,
+        "home": h,
+        "away": a,
+        "campionato": camp,
+        "giornata": giornata,
+        "data": match_date,
+        "pronostico_sicuro": pronostico_sicuro,
+        "top3": top3,
+        "prob_sicuro": prob_sicuro,
+        "risultati_attesi": risultati_attesi,
+        "risultato_reale": None,
+        "esito": None,  # "✅" / "❌" / "⏳"
+        "salvato_il": datetime.now().strftime("%d/%m/%Y %H:%M")
+    })
+    save_predictions(preds)
+
+def aggiorna_risultati_reali(api_key):
+    """Controlla le predizioni in attesa e aggiorna con i risultati reali."""
+    preds = load_predictions()
+    aggiornate = 0
+    for p in preds:
+        if p.get("esito") not in [None, "⏳"]:
+            continue
+        if not p.get("data"):
+            continue
+        # Controlla solo partite con data passata
+        try:
+            match_dt = datetime.strptime(p["data"], "%d/%m/%Y %H:%M")
+            if match_dt > datetime.now():
+                p["esito"] = "⏳"
+                continue
+        except:
+            continue
+        # Cerca il risultato su football-data.org
+        l_map = {"Serie A": "SA", "Premier League": "PL", "La Liga": "PD", "Bundesliga": "BL1"}
+        comp = l_map.get(p.get("campionato", "Serie A"), "SA")
+        try:
+            r = requests.get(
+                f"https://api.football-data.org/v4/competitions/{comp}/matches",
+                headers={"X-Auth-Token": api_key},
+                params={"matchday": p["giornata"], "status": "FINISHED"}
+            )
+            for match in r.json().get("matches", []):
+                h_n = clean_name(match["homeTeam"].get("shortName") or match["homeTeam"].get("name", ""))
+                a_n = clean_name(match["awayTeam"].get("shortName") or match["awayTeam"].get("name", ""))
+                if clean_name(p["home"]) in h_n or h_n in clean_name(p["home"]):
+                    gh = match["score"]["fullTime"]["home"]
+                    ga = match["score"]["fullTime"]["away"]
+                    if gh is None:
+                        continue
+                    risultato = f"{gh}-{ga}"
+                    p["risultato_reale"] = risultato
+                    # Verifica esito pronostico sicuro
+                    ps = p.get("pronostico_sicuro", "").lower()
+                    esito = verifica_esito(ps, gh, ga, p["home"], p["away"])
+                    p["esito"] = esito
+                    aggiornate += 1
+                    break
+        except:
+            pass
+    if aggiornate > 0:
+        save_predictions(preds)
+    return aggiornate
+
+def verifica_esito(pronostico, gh, ga, home, away):
+    """Verifica se il pronostico si è avverato dato il risultato."""
+    p = pronostico.lower()
+    totale = gh + ga
+    h_clean = clean_name(home).lower()
+    a_clean = clean_name(away).lower()
+    if "under 2.5" in p or "under2.5" in p:
+        return "✅" if totale < 3 else "❌"
+    if "over 2.5" in p or "over2.5" in p:
+        return "✅" if totale > 2 else "❌"
+    if "under 3.5" in p:
+        return "✅" if totale < 4 else "❌"
+    if "over 3.5" in p:
+        return "✅" if totale > 3 else "❌"
+    if "gg" in p or "goal/goal" in p or "entrambe segnano" in p:
+        return "✅" if gh > 0 and ga > 0 else "❌"
+    if "ng" in p or "no goal" in p or "nessuna segna" in p:
+        return "✅" if gh == 0 or ga == 0 else "❌"
+    if "pareggio" in p or "draw" in p:
+        return "✅" if gh == ga else "❌"
+    # Vittoria casa
+    for nome in [h_clean, home.lower()]:
+        if nome in p and ("vittoria" in p or "vince" in p or "1 -" in p):
+            return "✅" if gh > ga else "❌"
+    # Vittoria trasferta
+    for nome in [a_clean, away.lower()]:
+        if nome in p and ("vittoria" in p or "vince" in p or "2 -" in p):
+            return "✅" if ga > gh else "❌"
+    return "⏳"
+
 
 # --- MOTORE LOGICO ---
 def clean_name(name):
@@ -694,6 +815,50 @@ IMPORTANTE: Usa SOLO i dati forniti."""
             }
             </style>""", unsafe_allow_html=True)
             st.markdown(html, unsafe_allow_html=True)
+
+            # --- SALVA PREDIZIONE NEL REGISTRO ---
+            try:
+                # Estrai pronostico sicuro dal testo
+                pronostico_sicuro = ""
+                top3 = []
+                prob_sicuro = 0.0
+                in_sicuro = False
+                in_top3 = False
+                for riga in righe:
+                    rs = riga.strip()
+                    if rs.startswith("PRONOSTICO SICURO"):
+                        in_sicuro = True; in_top3 = False; continue
+                    if rs.startswith("TOP 3"):
+                        in_top3 = True; in_sicuro = False; continue
+                    if any(rs.startswith(s) for s in ["STATO DI FORMA","ANALISI","RAGIONAMENTO","RISULTATI","LIVELLO"]):
+                        in_sicuro = False; in_top3 = False
+                    if in_sicuro and rs and not pronostico_sicuro:
+                        pronostico_sicuro = rs[:150]
+                        import re
+                        m_prob = re.search(r"(\d+)\%", rs)
+                        if m_prob: prob_sicuro = int(m_prob.group(1))
+                    if in_top3 and rs and rs[0].isdigit():
+                        top3.append(rs[:120])
+
+                # Data partita
+                match_date_str = ""
+                for mx in st.session_state.get("live_data", []):
+                    hn = clean_name(mx["homeTeam"].get("shortName") or mx["homeTeam"].get("name",""))
+                    if clean_name(h) in hn or hn in clean_name(h):
+                        try:
+                            dt_obj = datetime.strptime(mx["utcDate"], "%Y-%m-%dT%H:%M:%SZ") + timedelta(hours=1)
+                            match_date_str = dt_obj.strftime("%d/%m/%Y %H:%M")
+                        except: pass
+                        break
+
+                giornata_p = st.session_state.get("live_data", [{}])[0].get("matchday", 0) if st.session_state.get("live_data") else 0
+
+                if pronostico_sicuro:
+                    save_prediction_entry(h, a, camp_sel, giornata_p, match_date_str,
+                                          pronostico_sicuro, top3, prob_sicuro, risultati_str)
+            except Exception as save_err:
+                pass  # salvataggio silenzioso
+
         except Exception as e:
             st.error(f"Errore AI: {e}")
 
@@ -781,6 +946,14 @@ with st.sidebar:
             except:
                 st.session_state.live_odds = []
                 st.session_state.live_odds_totals = []
+
+            # Aggiorna risultati reali predizioni in attesa
+            try:
+                n_agg = aggiorna_risultati_reali(API_KEY_DATA)
+                if n_agg > 0:
+                    st.sidebar.success(f"✅ {n_agg} risultati aggiornati nel registro")
+            except:
+                pass
         except Exception as e:
             st.sidebar.error(f"Errore sincronizzazione: {e}")
 
@@ -792,7 +965,10 @@ with st.sidebar:
 
 engine = get_league_engine(camp_sel)
 
-if 'live_data' in st.session_state and engine and g_sel is not None:
+tab1, tab2 = st.tabs(["🏟️ PARTITE", "📒 REGISTRO"])
+
+with tab1:
+ if 'live_data' in st.session_state and engine and g_sel is not None:
     team_stats, avg_h, avg_a, df_full = engine
     matches = [m for m in st.session_state.live_data if m['matchday'] == g_sel]
     st.subheader(f"🏟️ {camp_sel.upper()} - GIORNATA {g_sel}")
@@ -864,5 +1040,69 @@ if 'live_data' in st.session_state and engine and g_sel is not None:
                 st.write("<br>", unsafe_allow_html=True)
                 st.button("🔍", key=f"ex_{idx}", on_click=show_details, args=(h_api, a_api, m, camp_sel))
             st.markdown("</div>", unsafe_allow_html=True)
-else:
+ else:
     st.info("👋 Terminale Pronto. Sincronizza per caricare la giornata.")
+
+with tab2:
+    st.subheader("📒 Registro Predizioni")
+    preds = load_predictions()
+    if not preds:
+        st.info("Nessuna predizione salvata. Clicca 🔍 su una partita per registrarla.")
+    else:
+        # Statistiche generali
+        totale = len(preds)
+        ok = sum(1 for p in preds if p.get("esito") == "✅")
+        ko = sum(1 for p in preds if p.get("esito") == "❌")
+        att = sum(1 for p in preds if p.get("esito") in [None, "⏳"])
+
+        c1, c2, c3, c4 = st.columns(4)
+        c1.metric("Totale", totale)
+        c2.metric("✅ Corretti", ok)
+        c3.metric("❌ Errati", ko)
+        c4.metric("⏳ In attesa", att)
+
+        if ok + ko > 0:
+            pct = ok / (ok + ko) * 100
+            st.markdown(f"**Accuratezza complessiva: {pct:.1f}%** ({ok}/{ok+ko} predizioni verificate)")
+
+        # Statistiche per mercato
+        mercati_ok = {}
+        mercati_tot = {}
+        for p in preds:
+            if p.get("esito") not in ["✅", "❌"]:
+                continue
+            ps = p.get("pronostico_sicuro", "").lower()
+            mercato = "Altro"
+            if "under 2.5" in ps: mercato = "Under 2.5"
+            elif "over 2.5" in ps: mercato = "Over 2.5"
+            elif "gg" in ps or "entrambe" in ps: mercato = "GG"
+            elif "ng" in ps or "no goal" in ps: mercato = "NG"
+            elif "pareggio" in ps: mercato = "Pareggio"
+            elif "vittoria" in ps or "vince" in ps: mercato = "Vittoria"
+            mercati_tot[mercato] = mercati_tot.get(mercato, 0) + 1
+            if p.get("esito") == "✅":
+                mercati_ok[mercato] = mercati_ok.get(mercato, 0) + 1
+
+        if mercati_tot:
+            st.markdown("**Accuratezza per mercato:**")
+            cols = st.columns(min(len(mercati_tot), 4))
+            for i, (mkt, tot) in enumerate(sorted(mercati_tot.items(), key=lambda x: -x[1])):
+                ok_m = mercati_ok.get(mkt, 0)
+                pct_m = ok_m / tot * 100 if tot > 0 else 0
+                cols[i % 4].metric(mkt, f"{pct_m:.0f}%", f"{ok_m}/{tot}")
+
+        st.divider()
+
+        # Lista predizioni
+        for p in sorted(preds, key=lambda x: x.get("data", ""), reverse=True):
+            esito = p.get("esito") or "⏳"
+            risultato = p.get("risultato_reale") or "—"
+            col_e, col_p, col_r = st.columns([0.5, 3, 1])
+            col_e.markdown(f"<div style='font-size:22px;text-align:center'>{esito}</div>", unsafe_allow_html=True)
+            with col_p:
+                st.markdown(f"**{p.get('home')} vs {p.get('away')}** — G{p.get('giornata')} {p.get('campionato')} — {p.get('data','')}")
+                st.markdown(f"🎯 *{p.get('pronostico_sicuro','')}*")
+                if p.get("top3"):
+                    st.markdown("Alt: " + " | ".join(p["top3"][:2]))
+            col_r.markdown(f"**{risultato}**")
+            st.divider()
