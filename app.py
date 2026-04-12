@@ -862,6 +862,81 @@ IMPORTANTE: Usa SOLO i dati forniti."""
         except Exception as e:
             st.error(f"Errore AI: {e}")
 
+def analisi_rapida_giornata(matches, team_stats, avg_h, avg_a, camp_sel, classifica_sess, giornata_n):
+    """
+    Calcola pronostici numerici per tutte le partite della giornata e li salva nel registro.
+    Nessuna chiamata AI — solo Poisson + segnali contestuali.
+    """
+    salvate = 0
+    for match in matches:
+        try:
+            h = match['homeTeam'].get('shortName') or match['homeTeam'].get('name', '?')
+            a = match['awayTeam'].get('shortName') or match['awayTeam'].get('name', '?')
+            h_cl = clean_name(h)
+            a_cl = clean_name(a)
+
+            # Data partita
+            try:
+                dt_obj = datetime.strptime(match['utcDate'], "%Y-%m-%dT%H:%M:%SZ") + timedelta(hours=1)
+                match_date_str = dt_obj.strftime("%d/%m/%Y %H:%M")
+            except:
+                match_date_str = ""
+
+            # Stats squadre
+            h_s = team_stats.get(h_cl, {"att": 0.85, "def": 1.15})
+            a_s = team_stats.get(a_cl, {"att": 0.85, "def": 1.15})
+
+            # Segnali contestuali
+            h_stand = classifica_sess.get(h_cl, {})
+            a_stand = classifica_sess.get(a_cl, {})
+
+            h_mult_att, h_mult_def, h_note = calcola_segnali([], [], [], h_stand, giornata=giornata_n, tutte_stand=classifica_sess)
+            a_mult_att, a_mult_def, a_note = calcola_segnali([], [], [], a_stand, giornata=giornata_n, tutte_stand=classifica_sess)
+
+            # Gol attesi corretti
+            h_exp = h_s["att"] * h_mult_att * a_s["def"] * a_mult_def * avg_h
+            a_exp = a_s["att"] * a_mult_att * h_s["def"] * h_mult_def * avg_a
+
+            # Poisson
+            m = get_full_poisson(h_exp, a_exp)
+            p1 = m["1"]; pX = m["X"]; p2 = m["2"]
+            po25 = 1 - m["u25"]; pu25 = m["u25"]
+            pgg = m["gg"]; png = 1 - m["gg"]
+
+            # Top 6 risultati
+            h_p = [poisson.pmf(i, h_exp) for i in range(8)]
+            a_p = [poisson.pmf(i, a_exp) for i in range(8)]
+            score_probs = sorted([(i, j, h_p[i]*a_p[j]) for i in range(6) for j in range(6)], key=lambda x: -x[2])
+            top6 = [f"{h} {g[0]}-{g[1]} {a}: {g[2]:.1%}" for g in score_probs[:6]]
+            risultati_str = "\n".join(top6)
+
+            # Pronostico sicuro: mercato con prob più alta
+            mercati = {
+                f"Vittoria {h}": p1,
+                "Pareggio": pX,
+                f"Vittoria {a}": p2,
+                "Over 2.5": po25,
+                "Under 2.5": pu25,
+                "GG": pgg,
+                "NG": png,
+            }
+            best_mkt = max(mercati, key=mercati.get)
+            best_prob = mercati[best_mkt]
+            pronostico_sicuro = f"{best_mkt} - {best_prob:.0%} - analisi automatica Poisson"
+
+            # Top 3 alternativi
+            altri = sorted([(k, v) for k, v in mercati.items() if k != best_mkt], key=lambda x: -x[1])
+            top3 = [f"{i+1}. {k} - {v:.0%}" for i, (k, v) in enumerate(altri[:3])]
+
+            # Salva nel registro
+            save_prediction_entry(h, a, camp_sel, giornata_n, match_date_str,
+                                  pronostico_sicuro, top3, round(best_prob*100, 1), risultati_str)
+            salvate += 1
+        except:
+            pass
+    return salvate
+
+
 # --- UI PRINCIPALE ---
 st.markdown('<div class="maradona-header"><h1>M4 STRATEGIC TERMINAL</h1><p>Intelligence Evolution v28.1</p></div>', unsafe_allow_html=True)
 
@@ -971,7 +1046,16 @@ with tab1:
  if 'live_data' in st.session_state and engine and g_sel is not None:
     team_stats, avg_h, avg_a, df_full = engine
     matches = [m for m in st.session_state.live_data if m['matchday'] == g_sel]
-    st.subheader(f"🏟️ {camp_sel.upper()} - GIORNATA {g_sel}")
+    col_title, col_btn = st.columns([4, 1])
+    with col_title:
+        st.subheader(f"🏟️ {camp_sel.upper()} - GIORNATA {g_sel}")
+    with col_btn:
+        st.write("")
+        if st.button("⚡ Analisi Rapida", help="Calcola e salva i pronostici numerici per tutte le partite della giornata"):
+            with st.spinner("Calcolo in corso..."):
+                classifica_sess_r = st.session_state.get("classifica", {})
+                n = analisi_rapida_giornata(matches, team_stats, avg_h, avg_a, camp_sel, classifica_sess_r, g_sel)
+            st.success(f"✅ {n} partite analizzate e salvate nel registro")
 
     for idx, match in enumerate(matches):
         h_api = match['homeTeam'].get('shortName') or match['homeTeam'].get('name', '?')
