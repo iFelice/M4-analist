@@ -136,13 +136,15 @@ def get_full_poisson(h_e, a_e):
 
 
 # --- STRATO INTERMEDIO: SEGNALI NUMERICI CONTESTUALI ---
-def calcola_segnali(risultati, infraset_giocate, infraset_programmate, stand):
+def calcola_segnali(risultati, infraset_giocate, infraset_programmate, stand, giornata=None, tutte_stand=None):
     """
     Calcola moltiplicatori da applicare ai gol attesi prima del Poisson.
     Ritorna (mult_att, mult_def, nota) dove:
       mult_att: corregge i gol attesi in attacco (>1 = squadra piu' in forma)
       mult_def: corregge i gol concessi (>1 = difesa piu' permeabile)
       nota: stringa con i segnali attivi per il prompt
+    giornata: numero giornata corrente (per attivare fattore motivazionale fase finale)
+    tutte_stand: dict completo classifica per calcolare distanze da obiettivi
     """
     mult_att = 1.0
     mult_def = 1.0
@@ -205,9 +207,60 @@ def calcola_segnali(risultati, infraset_giocate, infraset_programmate, stand):
             mult_def += 0.04
             note.append(f"difesa permeabile ({gs} GS in {pg} pg): def +4%")
 
+    # --- FATTORE MOTIVAZIONALE (attivo dalla giornata 28 in poi) ---
+    # Logica: in fase finale gli obiettivi di classifica impattano sull'intensita'
+    GIORNATE_TOTALI = 38
+    if giornata and giornata >= 28 and stand and tutte_stand:
+        pos = stand.get("pos", 10)
+        punti = stand.get("punti", 0)
+        pg = stand.get("pg", 1)
+        giornate_rimaste = GIORNATE_TOTALI - giornata
+
+        # Calcola punti di riferimento dalla classifica completa
+        punti_list = sorted([s.get("punti", 0) for s in tutte_stand.values()], reverse=True)
+        n_squadre = len(punti_list)
+
+        # Zona retrocessione: ultime 3
+        soglia_salvo = punti_list[n_squadre - 4] if n_squadre >= 4 else 0
+        # Zona Champions: prime 4
+        soglia_champions = punti_list[3] if n_squadre >= 4 else 999
+        # Zona Europa: prime 6
+        soglia_europa = punti_list[5] if n_squadre >= 6 else 999
+
+        dist_retrocessione = punti - soglia_salvo  # positivo = al sicuro
+        dist_champions = soglia_champions - punti  # positivo = distante dalla Champions
+        dist_europa = soglia_europa - punti
+
+        # LOTTA SALVEZZA: squadra in pericolo → difende di più, meno gol attesi ma difesa più dura
+        if dist_retrocessione <= (giornate_rimaste * 1.5) and pos >= 15:
+            mult_def -= 0.07  # difesa più organizzata per necessità
+            mult_att -= 0.04  # meno propensi al rischio offensivo
+            note.append(f"lotta salvezza (pos {pos}, {dist_retrocessione:+.0f} pt dalla zona): def -7%, att -4%")
+
+        # ZONA RETROCESSIONE DIRETTA: squadra già retrocessa o quasi → demotivazione
+        elif pos >= 18 and dist_retrocessione < -3:
+            mult_att -= 0.06
+            mult_def += 0.05
+            note.append(f"retrocessione quasi certa (pos {pos}): att -6%, def +5%")
+
+        # LOTTA CHAMPIONS: a un passo → motivazione massima in attacco
+        elif dist_champions <= (giornate_rimaste * 1.2) and pos <= 6:
+            mult_att += 0.05
+            note.append(f"lotta Champions (pos {pos}, -{dist_champions:.0f} pt): att +5%")
+
+        # GIA' CAMPIONE O AMPIO VANTAGGIO: possibile calo di tensione
+        elif pos == 1 and punti_list[0] - punti_list[1] > giornate_rimaste * 2:
+            mult_att -= 0.03
+            note.append(f"vantaggio ampio in testa: possibile gestione att -3%")
+
+        # OBIETTIVO EUROPA RAGGIUNGIBILE: motivazione alta
+        elif dist_europa <= (giornate_rimaste * 1.5) and 6 < pos <= 10:
+            mult_att += 0.03
+            note.append(f"corsa Europa (pos {pos}, -{dist_europa:.0f} pt): att +3%")
+
     # Clamp per sicurezza
-    mult_att = max(0.80, min(1.20, mult_att))
-    mult_def = max(0.80, min(1.20, mult_def))
+    mult_att = max(0.78, min(1.22, mult_att))
+    mult_def = max(0.78, min(1.22, mult_def))
 
     nota_str = " | ".join(note) if note else "nessun segnale contestuale significativo"
     return mult_att, mult_def, nota_str
@@ -399,17 +452,24 @@ def show_details(h, a, m, camp_sel="Serie A"):
         h_stand_s = classifica_sess.get(h_cl_key, {})
         a_stand_s = classifica_sess.get(a_cl_key, {})
 
+        # Giornata corrente e classifica completa per fattore motivazionale
+        giornata_corrente = st.session_state.get("live_data", [{}])[0].get("matchday") if st.session_state.get("live_data") else None
+
         h_mult_att, h_mult_def, h_note_seg = calcola_segnali(
             contesto.get("h_risultati", []) if contesto else [],
             contesto.get("h_infraset", []) if contesto else [],
             contesto.get("h_infraset_prog", []) if contesto else [],
-            h_stand_s
+            h_stand_s,
+            giornata=giornata_corrente,
+            tutte_stand=classifica_sess
         )
         a_mult_att, a_mult_def, a_note_seg = calcola_segnali(
             contesto.get("a_risultati", []) if contesto else [],
             contesto.get("a_infraset", []) if contesto else [],
             contesto.get("a_infraset_prog", []) if contesto else [],
-            a_stand_s
+            a_stand_s,
+            giornata=giornata_corrente,
+            tutte_stand=classifica_sess
         )
 
         # Recupera stats squadre dall'engine
