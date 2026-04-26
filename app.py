@@ -585,14 +585,29 @@ def show_details(h, a, m, camp_sel="Serie A"):
             h_exp = 1.3
             a_exp = 1.1
 
-        m_adj = get_full_poisson(h_exp, a_exp)
+                m_adj = get_full_poisson(h_exp, a_exp)
 
         p1 = m_adj['1']
         pX = m_adj['X']
         p2 = m_adj['2']
         po25 = 1 - m_adj['u25']
-        po15 = 1 - m_adj['u15']
+        pu25 = 1 - m_adj['u25']
         pgg = m_adj['gg']
+        png = 1 - m_adj['gg']
+
+        # --- FIX: TROVIAMO MATEMATICAMENTE IL MERCATO PIU' ALTO PER IMPORLO ALL'AI ---
+        mercati_calcolati = {
+            f"Vittoria {h}": p1,
+            "Pareggio": pX,
+            f"Vittoria {a}": p2,
+            "Over 2.5": po25,
+            "Under 2.5": pu25,
+            "GG": pgg,
+            "NG": png
+        }
+        mercato_top = max(mercati_calcolati, key=mercati_calcolati.get)
+        prob_top = mercati_calcolati[mercato_top]
+        # -----------------------------------------------------------------------------
 
         xg_data_check = get_understat_xg(camp_sel)
         xg_status = f"xG attivi ({len(xg_data_check)} squadre)" if xg_data_check else "xG non disponibili - uso medie storiche"
@@ -613,33 +628,7 @@ SEGNALI CONTESTUALI APPLICATI AL MODELLO:
         top_scores = score_probs[:6]
         risultati_str = "\n".join([f"  {h} {g[0]}-{g[1]} {a}: {g[2]:.1%}" for g in top_scores])
 
-        q1, qX, q2 = 0.0, 0.0, 0.0
-        qo25, qu25 = 0.0, 0.0
-        h_cl = clean_name(h)
-
-        if "live_odds" in st.session_state and isinstance(st.session_state.live_odds, list):
-            for mo in st.session_state.live_odds:
-                if h_cl in clean_name(mo.get("home_team", "")):
-                    try:
-                        odds = {o["name"]: o["price"] for o in mo["bookmakers"][0]["markets"][0]["outcomes"]}
-                        q1 = odds.get(mo["home_team"], 0.0)
-                        qX = odds.get("Draw", odds.get("Tie", 0.0))
-                        q2 = odds.get(mo["away_team"], 0.0)
-                    except: pass
-
-        if "live_odds_totals" in st.session_state and isinstance(st.session_state.live_odds_totals, list):
-            for mo in st.session_state.live_odds_totals:
-                if h_cl in clean_name(mo.get("home_team", "")):
-                    try:
-                        for bk in mo.get("bookmakers", []):
-                            for mkt in bk.get("markets", []):
-                                outcomes = {o["name"]: o["price"] for o in mkt.get("outcomes", [])}
-                                if "Over" in outcomes:
-                                    qo25 = outcomes.get("Over", 0.0)
-                                    qu25 = outcomes.get("Under", 0.0)
-                                    break
-                            if qo25 > 0: break
-                    except: pass
+        # ... [OMISSIS CODICE QUOTE] ...
 
         quote_str = f"""
 QUOTE BOOKMAKER (solo riferimento):
