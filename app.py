@@ -585,7 +585,7 @@ def show_details(h, a, m, camp_sel="Serie A"):
             h_exp = 1.3
             a_exp = 1.1
 
-                        m_adj = get_full_poisson(h_exp, a_exp)
+                    m_adj = get_full_poisson(h_exp, a_exp)
 
         p1 = m_adj['1']
         pX = m_adj['X']
