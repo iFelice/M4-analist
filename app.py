@@ -17,7 +17,6 @@ API_KEY_DATA = "c299e4a676a54d48a642f20bca7f4480"
 JSONBIN_API_KEY = st.secrets.get("JSONBIN_API_KEY", "")
 JSONBIN_BIN_ID = st.secrets.get("JSONBIN_BIN_ID", "")
 
-# Inizializzazione AI
 try:
     groq_client = Groq(api_key=GROQ_API_KEY) if GROQ_API_KEY else None
 except Exception as e:
@@ -49,11 +48,8 @@ st.markdown(f"""
     .label-header {{ color: {lbl}; font-size: 15px !important; font-weight: 900; text-transform: uppercase; display: block; margin-bottom: 5px; border-bottom: 1px solid {border}; }}
     .match-date {{ font-size: 15px !important; color: #3b82f6 !important; font-weight: 700; display: block; margin-top: 5px; }}
     .stat-container {{ background-color: {stat_bg}; border: 1px solid {border}; border-radius: 8px; padding: 10px; text-align: center; height: 100%; }}
-    .val-sign {{ color: {txt} !important; font-weight: 800; font-size: 13px; margin-bottom: 2px; }}
     .val-p-green {{ color: #28a745; font-size: 17px; font-weight: 800; }}
     .val-p-red {{ color: #dc3545; font-size: 17px; font-weight: 800; }}
-    .val-q {{ color: #856404; font-size: 14px; font-weight: 700; display: block; margin-top: 3px; font-family: monospace; }}
-    [data-testid="stVerticalBlock"] > div {{ gap: 0rem !important; }}
     .top-mix-row {{ background-color: {card}; border: 1px solid {border}; border-radius: 8px; padding: 15px; margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center; }}
     </style>
     """, unsafe_allow_html=True)
@@ -212,7 +208,7 @@ def get_full_poisson(h_e, a_e):
             "u15": get_u(1.5), "u25": get_u(2.5), "u35": get_u(3.5), "gg": (1-h_p[0])*(1-a_p[0])}
 
 def calcola_segnali(risultati, infraset_giocate, infraset_programmate, stand, giornata=None, tutte_stand=None):
-    mult_att = 1.0; mult_def = 1.0; note = []
+    mult_att = 1.0; mult_def = 1.0
     score_forma = 0; n_ris = 0
     for r in risultati:
         if r.endswith("(V)"): score_forma += 1; n_ris += 1
@@ -286,8 +282,12 @@ def get_contesto_partita(h, a, camp_sel):
     match_date = now_utc = datetime.now(timezone.utc); match_id_found = None
     for mx in st.session_state.get("live_data", []):
         if clean_name(h) in clean_name(mx["homeTeam"].get("shortName", "") or mx["homeTeam"].get("name", "")):
-            try: match_date = datetime.fromisoformat(mx["utcDate"].replace("Z", "+00:00")); match_id_found = mx["id"]
-            except: pass; break
+            try: 
+                match_date = datetime.fromisoformat(mx["utcDate"].replace("Z", "+00:00"))
+                match_id_found = mx["id"]
+            except: 
+                pass
+            break # FIX: Break correttamente fuori dal try/except
     if h_id: contesto["h_infraset"], contesto["h_infraset_prog"] = get_infraset_data(h_id, camp_code, match_date.isoformat(), now_utc.isoformat())
     if a_id: contesto["a_infraset"], contesto["a_infraset_prog"] = get_infraset_data(a_id, camp_code, match_date.isoformat(), now_utc.isoformat())
     return contesto, match_id_found
@@ -363,7 +363,6 @@ def show_details(h, a, m, camp_sel="Serie A"):
         p1, pX, p2, po25, pu25, pgg, png = m_adj['1'], m_adj['X'], m_adj['2'], 1 - m_adj['u25'], m_adj['u25'], m_adj['gg'], 1 - m_adj['gg']
         mercati_calcolati = {f"Vittoria {h}": p1, "Pareggio": pX, f"Vittoria {a}": p2, "Over 2.5": po25, "Under 2.5": pu25, "GG": pgg, "NG": png}
         mercato_top = max(mercati_calcolati, key=mercati_calcolati.get); prob_top = mercati_calcolati[mercato_top]
-        xg_status = f"xG attivi ({len(get_understat_xg(camp_sel))} squadre)" if get_understat_xg(camp_sel) else "xG non disponibili"
         score_probs = sorted([(i, j, poisson.pmf(i, h_exp) * poisson.pmf(j, a_exp)) for i in range(6) for j in range(6)], key=lambda x: -x[2])
         risultati_str = "\n".join([f"  {h} {g[0]}-{g[1]} {a}: {g[2]:.1%}" for g in score_probs[:6]])
         prompt = f"""Sei Billy Walters. Analizza {h} vs {a}.
@@ -391,14 +390,15 @@ TOP 3 MERCATI ALTERNATIVI: I 3 mercati con prob più alta dopo "{mercato_top}". 
                     if clean_name(h) in clean_name(mx["homeTeam"].get("shortName", "") or mx["homeTeam"].get("name","")):
                         m_id = mx.get("id")
                         try: match_date_str = (datetime.strptime(mx["utcDate"], "%Y-%m-%dT%H:%M:%SZ") + timedelta(hours=2)).strftime("%d/%m/%Y %H:%M")
-                        except: pass; break
+                        except: pass
+                        break # FIX: Break posizionato correttamente
             if pronostico_sicuro and m_id:
                 giornata_p = st.session_state.get("live_data", [{}])[0].get("matchday", 0) if st.session_state.get("live_data") else 0
                 save_prediction_entry(m_id, h, a, camp_sel, giornata_p, match_date_str, pronostico_sicuro, top3, prob_sicuro, risultati_str)
         except Exception as e: st.error(f"Errore AI: {e}")
 
 # --- UI PRINCIPALE ---
-st.markdown('<div class="maradona-header"><h1>M4 STRATEGIC TERMINAL</h1><p>Intelligence Evolution v33.0</p></div>', unsafe_allow_html=True)
+st.markdown('<div class="maradona-header"><h1>M4 STRATEGIC TERMINAL</h1><p>Intelligence Evolution v34.0</p></div>', unsafe_allow_html=True)
 map_odds = {"Serie A": "soccer_italy_serie_a", "Premier League": "soccer_epl", "La Liga": "soccer_spain_la_liga", "Bundesliga": "soccer_germany_bundesliga"}
 
 with st.sidebar:
@@ -406,9 +406,16 @@ with st.sidebar:
     camp_sel = st.selectbox("CAMPIONATO", ["Serie A", "Premier League", "La Liga", "Bundesliga"])
     try:
         xg_check = get_understat_xg(camp_sel)
-        st.markdown(f"<div style='font-size:12px; color:#28a745; font-weight:700;'>✅ xG caricati ({len(xg_check)} squadre)</div>" if xg_check and len(xg_check) > 0 else "<div style='font-size:12px; color:#dc3545; font-weight:700;'>⚠️ xG non disponibili (uso medie storiche)</div>", unsafe_allow_html=True)
+        if xg_check and len(xg_check) > 0:
+            st.markdown(f"<div style='font-size:12px; color:#28a745; font-weight:700;'>✅ xG caricati ({len(xg_check)} squadre)</div>", unsafe_allow_html=True)
+        else:
+            st.markdown("<div style='font-size:12px; color:#dc3545; font-weight:700;'>⚠️ xG non disponibili (uso medie storiche)</div>", unsafe_allow_html=True)
     except: pass
-    camp_cached = st.session_state.get("live_camp", None); has_data = "live_data" in st.session_state and st.session_state.live_data and camp_cached == camp_sel
+    
+    # FIX: Convertiamo has_data in booleano puro per evitare TypeError nel bottone
+    camp_cached = st.session_state.get("live_camp", None)
+    has_data = bool("live_data" in st.session_state and st.session_state.get("live_data") and camp_cached == camp_sel)
+    
     col_s1, col_s2 = st.columns([2, 1])
     with col_s1: do_sync = st.button("🔄 SINCRONIZZA TURNO", disabled=has_data)
     with col_s2: do_refresh = st.button("↺ Refresh")
