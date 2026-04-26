@@ -585,7 +585,7 @@ def show_details(h, a, m, camp_sel="Serie A"):
             h_exp = 1.3
             a_exp = 1.1
 
-                m_adj = get_full_poisson(h_exp, a_exp)
+                        m_adj = get_full_poisson(h_exp, a_exp)
 
         p1 = m_adj['1']
         pX = m_adj['X']
@@ -595,7 +595,7 @@ def show_details(h, a, m, camp_sel="Serie A"):
         pgg = m_adj['gg']
         png = 1 - m_adj['gg']
 
-        # --- FIX: TROVIAMO MATEMATICAMENTE IL MERCATO PIU' ALTO PER IMPORLO ALL'AI ---
+        # --- TROVIAMO MATEMATICAMENTE IL MERCATO PIU' ALTO PER IMPORLO ALL'AI ---
         mercati_calcolati = {
             f"Vittoria {h}": p1,
             "Pareggio": pX,
@@ -607,7 +607,7 @@ def show_details(h, a, m, camp_sel="Serie A"):
         }
         mercato_top = max(mercati_calcolati, key=mercati_calcolati.get)
         prob_top = mercati_calcolati[mercato_top]
-        # -----------------------------------------------------------------------------
+        # -------------------------------------------------------------------------
 
         xg_data_check = get_understat_xg(camp_sel)
         xg_status = f"xG attivi ({len(xg_data_check)} squadre)" if xg_data_check else "xG non disponibili - uso medie storiche"
@@ -628,7 +628,33 @@ SEGNALI CONTESTUALI APPLICATI AL MODELLO:
         top_scores = score_probs[:6]
         risultati_str = "\n".join([f"  {h} {g[0]}-{g[1]} {a}: {g[2]:.1%}" for g in top_scores])
 
-        # ... [OMISSIS CODICE QUOTE] ...
+        q1, qX, q2 = 0.0, 0.0, 0.0
+        qo25, qu25 = 0.0, 0.0
+        h_cl = clean_name(h)
+
+        if "live_odds" in st.session_state and isinstance(st.session_state.live_odds, list):
+            for mo in st.session_state.live_odds:
+                if h_cl in clean_name(mo.get("home_team", "")):
+                    try:
+                        odds = {o["name"]: o["price"] for o in mo["bookmakers"][0]["markets"][0]["outcomes"]}
+                        q1 = odds.get(mo["home_team"], 0.0)
+                        qX = odds.get("Draw", odds.get("Tie", 0.0))
+                        q2 = odds.get(mo["away_team"], 0.0)
+                    except: pass
+
+        if "live_odds_totals" in st.session_state and isinstance(st.session_state.live_odds_totals, list):
+            for mo in st.session_state.live_odds_totals:
+                if h_cl in clean_name(mo.get("home_team", "")):
+                    try:
+                        for bk in mo.get("bookmakers", []):
+                            for mkt in bk.get("markets", []):
+                                outcomes = {o["name"]: o["price"] for o in mkt.get("outcomes", [])}
+                                if "Over" in outcomes:
+                                    qo25 = outcomes.get("Over", 0.0)
+                                    qu25 = outcomes.get("Under", 0.0)
+                                    break
+                            if qo25 > 0: break
+                    except: pass
 
         quote_str = f"""
 QUOTE BOOKMAKER (solo riferimento):
@@ -636,8 +662,10 @@ QUOTE BOOKMAKER (solo riferimento):
 - Over 2.5: {qo25 or "n/d"}"""
 
         classifica = st.session_state.get("classifica", {})
-        h_stand = classifica.get(h_cl_name := clean_name(h), {})
-        a_stand = classifica.get(a_cl_name := clean_name(a), {})
+        h_cl_name = clean_name(h)
+        a_cl_name = clean_name(a)
+        h_stand = classifica.get(h_cl_name, {})
+        a_stand = classifica.get(a_cl_name, {})
         if h_stand and a_stand:
             class_str = f"""
 CLASSIFICA ATTUALE:
@@ -661,10 +689,10 @@ CLASSIFICA ATTUALE:
 RISULTATI RECENTI IN CAMPIONATO:
 - Ultime 5 partite {h}: {h_ris}
 - Ultime 5 partite {a}: {a_ris}
-PARTITE INFRASETTIMANALI GIOCATE (tra ultima giornata e questa partita):
+PARTITE INFRASETTIMANALI GIOCATE:
 - {h}: {h_infra}
 - {a}: {a_infra}
-IMPEGNI INFRASETTIMANALI IN PROGRAMMA (prima di questa partita):
+IMPEGNI INFRASETTIMANALI IN PROGRAMMA:
 - {h}: {h_prog}
 - {a}: {a_prog}
 NOTIZIE INDISPONIBILI:
@@ -688,12 +716,11 @@ RISULTATI PIU' PROBABILI (modello Poisson, top 6):
 
 {quote_str}
 
-REGOLE:
+REGOLE ASSOLUTE:
 - La stanchezza PENALIZZA la squadra che ha giocato infrasettimanale.
-- Over 2.5 = 3+ gol totali (es. 2-1, 3-0). GG = entrambe segnano (es. 1-1, 2-1). NON sono sinonimi.
+- Over 2.5 = 3+ gol totali. GG = entrambe segnano. NON sono sinonimi.
 - NON menzionare mai Over 1.5.
-- Indica sempre il numero esatto di partite disponibili nei risultati recenti.
-- Il PRONOSTICO SICURO deve emergere naturalmente dai dati. Non forzare mai un pronostico che i dati non supportano.
+- Il PRONOSTICO SICURO è DETTATO DALLA MATEMATICA, non dalla tua intuizione calcistica.
 
 STRUTTURA (italiano, tono diretto, senza fronzoli):
 
@@ -711,14 +738,13 @@ Elenca i 3 risultati piu' probabili con la loro percentuale. Per ciascuno scrivi
 Es: "1-0 (12%) → vittoria {h}, NG, Under 2.5"
 
 PRONOSTICO SICURO
-Il mercato con la probabilita' piu' alta tra TUTTI i mercati disponibili e' "{mercato_top}" con il {prob_top:.0%}.
-IL TUO PRONOSTICO SICURO DEVE ESSERE OBBLIGATORIAMENTE "{mercato_top}".
-Non puoi scegliere altri mercati per il pronostico sicuro, anche se la tua intuizione calcistica suggerirebbe altrimenti. I dati comandano.
-Formato OBBLIGATORIO: "{mercato_top} - prob {prob_top:.0%} - motivazione basata sui dati"
+Il mercato con la probabilita' piu' alta in assoluto tra tutti è "{mercato_top}" al {prob_top:.0%}.
+DEVI scrivere OBBLIGATORIAMENTE "{mercato_top} - prob {prob_top:.0%} - [tua motivazione basata sui dati]".
+NON scegliere la vittoria di una squadra se un altro mercato (come GG, NG, Under, Over) ha una probabilità superiore. La matematica viene prima di tutto.
 
 TOP 3 MERCATI ALTERNATIVI
-I 3 mercati con probabilita' piu' alta dopo il pronostico sicuro, in ordine decrescente.
-Formato: "N. Nome Mercato Preciso - prob X% - motivazione"
+I 3 mercati con probabilita' piu' alta DOPO "{mercato_top}", in ordine decrescente.
+Formato: "N. Mercato - prob X% - motivazione"
 
 LIVELLO DI CONFIDENZA
 Voto 1-10 con motivazione breve.
