@@ -166,28 +166,52 @@ def get_league_engine(camp_key):
     p = {"Serie A": "SerieA", "Premier League": "Premier", "La Liga": "LaLiga", "Bundesliga": "Bundesliga"}
     prefix = p.get(camp_key)
     if not prefix: return None
+
+    # Cerca file storici, Live e anche il formato base (es. Premier.csv)
     files_storici = sorted(glob.glob(f"./database/{prefix}_20*.csv"))
     files_live = glob.glob(f"./database/{prefix}_Live.csv")
-    if not files_storici and not files_live: return None
+    files_base = glob.glob(f"./database/{prefix}.csv")  # NUOVO: supporta Premier.csv
+    
+    if not files_storici and not files_live and not files_base: return None
+
     dfs = []
+    # Stagioni passate: peso 1
     for f in files_storici:
         try: df_tmp = pd.read_csv(f, on_bad_lines='skip', low_memory=False); df_tmp['peso'] = 1.0; dfs.append(df_tmp)
         except: pass
+    
+    # File Live: peso 4
     for f in files_live:
         try: df_tmp = pd.read_csv(f, on_bad_lines='skip', low_memory=False); df_tmp['peso'] = 4.0; dfs.append(df_tmp)
         except: pass
+        
+    # NUOVO - File base (es. Premier.csv): peso 3 (più importanti del passato, meno del Live)
+    for f in files_base:
+        try: df_tmp = pd.read_csv(f, on_bad_lines='skip', low_memory=False); df_tmp['peso'] = 3.0; dfs.append(df_tmp)
+        except: pass
+
     if not dfs: return None
+    
     df = pd.concat(dfs, ignore_index=True)
     df['Date'] = pd.to_datetime(df['Date'], dayfirst=True, errors='coerce')
     df = df.dropna(subset=['HomeTeam', 'AwayTeam', 'FTR']).sort_values('Date')
-    df['HomeClean'] = df['HomeTeam'].apply(clean_name); df['AwayClean'] = df['AwayTeam'].apply(clean_name)
+    df['HomeClean'] = df['HomeTeam'].apply(clean_name)
+    df['AwayClean'] = df['AwayTeam'].apply(clean_name)
+    
+    # Se non ci sono pesi, assegnali
+    if 'peso' not in df.columns:
+        df['peso'] = 1.0
+        
     avg_h = np.average(df['FTHG'].dropna(), weights=df.loc[df['FTHG'].notna(), 'peso'])
     avg_a = np.average(df['FTAG'].dropna(), weights=df.loc[df['FTAG'].notna(), 'peso'])
-    xg_data = get_understat_xg(camp_key); mkt_values = get_market_values()
+    
+    xg_data = get_understat_xg(camp_key)
+    mkt_values = get_market_values()
     league_xg = league_xga = None
     if xg_data and len(xg_data) >= 10:
         league_xg = np.mean([v['xG_avg'] for v in xg_data.values()])
         league_xga = np.mean([v['xGA_avg'] for v in xg_data.values()])
+        
     stats = {}
     for t in pd.concat([df['HomeClean'], df['AwayClean']]).unique():
         h_h = df[df['HomeClean']==t]; a_h = df[df['AwayClean']==t]
