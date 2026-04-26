@@ -711,10 +711,10 @@ Elenca i 3 risultati piu' probabili con la loro percentuale. Per ciascuno scrivi
 Es: "1-0 (12%) → vittoria {h}, NG, Under 2.5"
 
 PRONOSTICO SICURO
-Il mercato con la probabilita' piu' alta tra TUTTI i mercati disponibili: 1X2, Under 2.5, Over 2.5, GG, NG.
-Non privilegiare automaticamente gli esiti 1X2 — se Under 2.5 ha probabilita' piu' alta della vittoria, Under 2.5 e' il pronostico sicuro.
-Formato OBBLIGATORIO: "Nome Mercato Preciso - prob X% - motivazione basata sui dati"
-(Esempi di Nome Mercato Preciso: "Over 2.5", "Under 2.5", "GG", "NG", "Vittoria {h}", "Pareggio")
+Il mercato con la probabilita' piu' alta tra TUTTI i mercati disponibili e' "{mercato_top}" con il {prob_top:.0%}.
+IL TUO PRONOSTICO SICURO DEVE ESSERE OBBLIGATORIAMENTE "{mercato_top}".
+Non puoi scegliere altri mercati per il pronostico sicuro, anche se la tua intuizione calcistica suggerirebbe altrimenti. I dati comandano.
+Formato OBBLIGATORIO: "{mercato_top} - prob {prob_top:.0%} - motivazione basata sui dati"
 
 TOP 3 MERCATI ALTERNATIVI
 I 3 mercati con probabilita' piu' alta dopo il pronostico sicuro, in ordine decrescente.
