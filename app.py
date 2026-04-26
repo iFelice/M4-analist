@@ -54,7 +54,7 @@ st.markdown(f"""
     </style>
     """, unsafe_allow_html=True)
 
-# --- REGISTRO PREDIZIONI (RISCRITTO E MIGLIORATO) ---
+# --- REGISTRO PREDIZIONI ---
 PREDICTIONS_FILE = "database/predictions.json"
 
 def load_predictions():
@@ -72,7 +72,6 @@ def save_predictions(preds):
         json.dump(preds, f, ensure_ascii=False, indent=2)
 
 def standardizza_mercato(testo):
-    """Estrae un codice mercato standard dal testo dell'AI per evitare errori di verifica."""
     t = testo.lower()
     if "under 2.5" in t or "under2.5" in t: return "UNDER_2.5"
     if "over 2.5" in t or "over2.5" in t: return "OVER_2.5"
@@ -86,15 +85,11 @@ def standardizza_mercato(testo):
     return "ALTRO"
 
 def save_prediction_entry(match_id, h, a, camp, giornata, match_date, pronostico_sicuro, top3, prob_sicuro, risultati_attesi):
-    """Salva una nuova predizione usando match_id come chiave univoca assoluta."""
     preds = load_predictions()
-    # Usa match_id per evitare duplicati in modo rigoroso
     for p in preds:
         if p.get("match_id") == match_id:
             return  
-    
     mercato_std = standardizza_mercato(pronostico_sicuro)
-    
     preds.append({
         "match_id": match_id,
         "home": h,
@@ -108,29 +103,24 @@ def save_prediction_entry(match_id, h, a, camp, giornata, match_date, pronostico
         "prob_sicuro": prob_sicuro,
         "risultati_attesi": risultati_attesi,
         "risultato_reale": None,
-        "esito": None,  # "✅" / "❌" / "⏳"
+        "esito": None,
         "salvato_il": datetime.now().strftime("%d/%m/%Y %H:%M")
     })
     save_predictions(preds)
 
 def aggiorna_risultati_reali(api_key):
-    """Controlla le predizioni in attesa e aggiorna con i risultati reali in modo robusto."""
     preds = load_predictions()
     aggiornate = 0
-    
-    # Raggruppa le predizioni in attesa per campionato per fare meno chiamate API
     pending = [p for p in preds if p.get("esito") in [None, "⏳"] and p.get("campionato")]
     if not pending:
         return 0
 
     l_map = {"Serie A": "SA", "Premier League": "PL", "La Liga": "PD", "Bundesliga": "BL1"}
     
-    # Chiamata API per ottenere le partite finite
     for camp, comp in l_map.items():
         camp_pending = [p for p in pending if p["campionato"] == camp]
         if not camp_pending:
             continue
-            
         try:
             r = requests.get(
                 f"https://api.football-data.org/v4/competitions/{comp}/matches",
@@ -141,12 +131,8 @@ def aggiorna_risultati_reali(api_key):
         except:
             continue
             
-        # Mappa i risultati per match_id per accesso O(1)
-        risultati_api = {}
-        for m in matches_data:
-            risultati_api[m["id"]] = m
+        risultati_api = {m["id"]: m for m in matches_data}
 
-        # Aggiorna le predizioni
         for p in camp_pending:
             m_id = p.get("match_id")
             if not m_id or m_id not in risultati_api:
@@ -170,10 +156,8 @@ def aggiorna_risultati_reali(api_key):
     return aggiornate
 
 def verifica_esito(mercato_std, gh, ga, home, away):
-    """Verifica l'esito in base al codice mercato standardizzato."""
     totale = gh + ga
     m = mercato_std.upper()
-    
     if m == "UNDER_2.5": return "✅" if totale < 3 else "❌"
     if m == "OVER_2.5": return "✅" if totale > 2 else "❌"
     if m == "UNDER_3.5": return "✅" if totale < 4 else "❌"
@@ -183,12 +167,7 @@ def verifica_esito(mercato_std, gh, ga, home, away):
     if m == "X": return "✅" if gh == ga else "❌"
     if m == "1": return "✅" if gh > ga else "❌"
     if m == "2": return "✅" if ga > gh else "❌"
-    
-    # Fallback fuzzy se standardizza_mercato non ha catturato bene
-    if "UNDER" in m and "2.5" in m: return "✅" if totale < 3 else "❌"
-    if "OVER" in m and "2.5" in m: return "✅" if totale > 2 else "❌"
-    
-    return "⏳" # Non verificabile
+    return "⏳"
 
 
 # --- MOTORE LOGICO ---
@@ -212,8 +191,6 @@ def get_league_engine(camp_key):
     if not files_storici and not files_live: return None
 
     dfs = []
-
-    # Stagioni storiche: peso 1x
     for f in files_storici:
         try:
             df_tmp = pd.read_csv(f, on_bad_lines='skip', low_memory=False)
@@ -221,7 +198,6 @@ def get_league_engine(camp_key):
             dfs.append(df_tmp)
         except: pass
 
-    # Stagione corrente (Live): peso 4x - NON DUPLICHIAMO LE RIGHE, USIAMO I PESI
     for f in files_live:
         try:
             df_tmp = pd.read_csv(f, on_bad_lines='skip', low_memory=False)
@@ -237,14 +213,12 @@ def get_league_engine(camp_key):
     df['HomeClean'] = df['HomeTeam'].apply(clean_name)
     df['AwayClean'] = df['AwayTeam'].apply(clean_name)
 
-    # Calcolo medie gol ponderate (FIX CRITICO: prima si gonfiavano duplicando le righe)
     avg_h = np.average(df['FTHG'].dropna(), weights=df.loc[df['FTHG'].notna(), 'peso'])
     avg_a = np.average(df['FTAG'].dropna(), weights=df.loc[df['FTAG'].notna(), 'peso'])
 
     xg_data = get_understat_xg(camp_key)
     mkt_values = get_market_values()
     
-    # FIX CRITICO XG: Normalizziamo gli xG rispetto alla media del campionato per renderli indici
     league_xg = None
     league_xga = None
     if xg_data and len(xg_data) >= 10:
@@ -256,10 +230,9 @@ def get_league_engine(camp_key):
         h_h = df[df['HomeClean']==t]
         a_h = df[df['AwayClean']==t]
 
-        # Se xG disponibili, trasformiamoli in RAPPORTI (stessa scala del ramo else)
         if xg_data and t in xg_data and league_xg and league_xga:
-            att = xg_data[t]['xG_avg'] / league_xg      # Es: 1.31 / 1.31 = 1.0 (squadra media)
-            defe = xg_data[t]['xGA_avg'] / league_xga    # Es: 0.84 / 1.15 = 0.73 (grande difesa)
+            att = xg_data[t]['xG_avg'] / league_xg
+            defe = xg_data[t]['xGA_avg'] / league_xga
         else:
             att_h = h_h['FTHG'].mean() / avg_h if not h_h.empty else 1.0
             att_a = a_h['FTAG'].mean() / avg_a if not a_h.empty else 1.0
@@ -268,13 +241,8 @@ def get_league_engine(camp_key):
             att = (att_h + att_a) / 2
             defe = (def_h + def_a) / 2
 
-        # Valore di mercato: ridotto drasticamente l'impatto (era /6000, ora /50000)
         val = mkt_values.get(t, 50)
-        stats[t] = {
-            'att': att * (1 + (val/50000)), 
-            'def': defe * (1 - (val/50000)), 
-            'val': val
-        }
+        stats[t] = {'att': att * (1 + (val/50000)), 'def': defe * (1 - (val/50000)), 'val': val}
 
     return stats, avg_h, avg_a, df
 
@@ -293,7 +261,6 @@ def calcola_segnali(risultati, infraset_giocate, infraset_programmate, stand, gi
     mult_def = 1.0
     note = []
 
-    # --- FORMA RECENTE ---
     score_forma = 0
     n_ris = 0
     for r in risultati:
@@ -314,7 +281,6 @@ def calcola_segnali(risultati, infraset_giocate, infraset_programmate, stand, gi
         elif forma_norm < -0.3:
             note.append(f"forma negativa ({score_forma}/{n_ris}): att {delta_att:.0%}")
 
-    # --- STANCHEZZA INFRASETTIMANALE ---
     if infraset_giocate:
         mult_att -= 0.04
         mult_def += 0.06
@@ -323,7 +289,6 @@ def calcola_segnali(risultati, infraset_giocate, infraset_programmate, stand, gi
         mult_att -= 0.02
         note.append(f"impegno infraset. in programma: possibile turnover att -2%")
 
-    # --- POSIZIONE IN CLASSIFICA ---
     if stand:
         pos = stand.get("pos", 10)
         pg = stand.get("pg", 1)
@@ -344,7 +309,6 @@ def calcola_segnali(risultati, infraset_giocate, infraset_programmate, stand, gi
             mult_def += 0.04
             note.append(f"difesa permeabile ({gs} GS in {pg} pg): def +4%")
 
-    # --- FATTORE MOTIVAZIONALE ---
     GIORNATE_TOTALI = 38
     if giornata and giornata >= 28 and stand and tutte_stand:
         pos = stand.get("pos", 10)
@@ -446,7 +410,6 @@ def get_contesto_partita(h, a, camp_sel):
 
     contesto["h_infraset"] = []
     contesto["a_infraset"] = []
-    from datetime import datetime, timedelta, timezone
     l_map2 = {"Serie A": "SA", "Premier League": "PL", "La Liga": "PD", "Bundesliga": "BL1"}
     camp_code = l_map2.get(camp_sel, "SA")
 
@@ -537,7 +500,6 @@ def get_contesto_partita(h, a, camp_sel):
         contesto["a_infraset"] = []
         contesto["a_infraset_prog"] = []
 
-    # Restituisco anche il match_id trovato per salvarlo nel registro
     return contesto, match_id_found
 
 # --- POPUP AI ---
@@ -585,7 +547,7 @@ def show_details(h, a, m, camp_sel="Serie A"):
             h_exp = 1.3
             a_exp = 1.1
 
-                    m_adj = get_full_poisson(h_exp, a_exp)
+        m_adj = get_full_poisson(h_exp, a_exp)
 
         p1 = m_adj['1']
         pX = m_adj['X']
@@ -595,7 +557,7 @@ def show_details(h, a, m, camp_sel="Serie A"):
         pgg = m_adj['gg']
         png = 1 - m_adj['gg']
 
-        # --- TROVIAMO MATEMATICAMENTE IL MERCATO PIU' ALTO PER IMPORLO ALL'AI ---
+        # TROVIAMO MATEMATICAMENTE IL MERCATO PIU' ALTO PER IMPORLO ALL'AI
         mercati_calcolati = {
             f"Vittoria {h}": p1,
             "Pareggio": pX,
@@ -607,7 +569,6 @@ def show_details(h, a, m, camp_sel="Serie A"):
         }
         mercato_top = max(mercati_calcolati, key=mercati_calcolati.get)
         prob_top = mercati_calcolati[mercato_top]
-        # -------------------------------------------------------------------------
 
         xg_data_check = get_understat_xg(camp_sel)
         xg_status = f"xG attivi ({len(xg_data_check)} squadre)" if xg_data_check else "xG non disponibili - uso medie storiche"
@@ -781,7 +742,7 @@ IMPORTANTE: Usa SOLO i dati forniti."""
             </style>""", unsafe_allow_html=True)
             st.markdown(html, unsafe_allow_html=True)
 
-            # --- SALVA PREDIZIONE NEL REGISTRO (ROBUSTO) ---
+            # --- SALVA PREDIZIONE NEL REGISTRO ---
             try:
                 pronostico_sicuro = ""
                 top3 = []
@@ -803,12 +764,10 @@ IMPORTANTE: Usa SOLO i dati forniti."""
                     if in_top3 and rs and rs[0].isdigit():
                         top3.append(rs[:120])
 
-                # Recupera o genera un match_id (fondamentale per non perdere la predizione)
                 match_date_str = ""
-                m_id = match_id # Ottenuto da get_contesto_partita
+                m_id = match_id
                 
                 if not m_id:
-                    # Fallback se l'id non è stato trovato prima
                     for mx in st.session_state.get("live_data", []):
                         hn = clean_name(mx["homeTeam"].get("shortName") or mx["homeTeam"].get("name",""))
                         if clean_name(h) in hn or hn in clean_name(h):
@@ -896,7 +855,7 @@ def analisi_rapida_giornata(matches, team_stats, avg_h, avg_a, camp_sel, classif
 
 
 # --- UI PRINCIPALE ---
-st.markdown('<div class="maradona-header"><h1>M4 STRATEGIC TERMINAL</h1><p>Intelligence Evolution v29.0</p></div>', unsafe_allow_html=True)
+st.markdown('<div class="maradona-header"><h1>M4 STRATEGIC TERMINAL</h1><p>Intelligence Evolution v29.1</p></div>', unsafe_allow_html=True)
 
 map_odds = {
     "Serie A": "soccer_italy_serie_a",
@@ -1037,7 +996,6 @@ with tab1:
 
         h_s = team_stats.get(h_cl, {'att': 1.0, 'def': 1.0})
         a_s = team_stats.get(a_cl, {'att': 1.0, 'def': 1.0})
-        # Poisson base per la card
         h_exp_base = h_s['att'] * a_s['def'] * avg_h
         a_exp_base = a_s['att'] * h_s['def'] * avg_a
         m = get_full_poisson(h_exp_base, a_exp_base)
@@ -1073,7 +1031,6 @@ with tab1:
 with tab2:
     st.subheader("📒 Registro Predizioni")
     
-    # Aggiornamento automatico dei risultati quando si apre il tab
     try:
         n_agg = aggiorna_risultati_reali(API_KEY_DATA)
         if n_agg > 0:
@@ -1113,7 +1070,7 @@ with tab2:
                 elif "gg" in ps: mercato = "GG"
                 elif "ng" in ps: mercato = "NG"
                 elif "pareggio" in ps: mercato = "X"
-                elif "vittoria" in ps: mercato = "1" # Semplificazione display
+                elif "vittoria" in ps: mercato = "1"
                 
             mercati_tot[mercato] = mercati_tot.get(mercato, 0) + 1
             if p.get("esito") == "✅":
