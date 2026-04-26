@@ -283,8 +283,7 @@ def get_contesto_partita(h, a, camp_sel):
             for r in ddgs.text(f"{a} infortunati squalificati {camp_sel} 2026", max_results=2): contesto["a_infortunati"].append(r["body"][:300])
     except: pass
     camp_code = {"Serie A": "SA", "Premier League": "PL", "La Liga": "PD", "Bundesliga": "BL1"}.get(camp_sel, "SA")
-    match_date = now_utc = datetime.now(timezone.utc)
-    match_id_found = None
+    match_date = now_utc = datetime.now(timezone.utc); match_id_found = None
     for mx in st.session_state.get("live_data", []):
         if clean_name(h) in clean_name(mx["homeTeam"].get("shortName", "") or mx["homeTeam"].get("name", "")):
             try: match_date = datetime.fromisoformat(mx["utcDate"].replace("Z", "+00:00")); match_id_found = mx["id"]
@@ -320,6 +319,29 @@ def fetch_and_calc_top_mix():
             all_preds.append({"league": league, "giornata": g_next, "home": h, "away": a, "match_id": match.get("id"), "utcDate": match['utcDate'], "market": best_mkt, "prob": best_prob, "prob_val": round(best_prob * 100, 1)})
     return sorted(all_preds, key=lambda x: x['prob'], reverse=True)[:10]
 
+# --- ANALISI RAPIDA ---
+def analisi_rapida_giornata(matches, team_stats, avg_h, avg_a, camp_sel, classifica_sess, giornata_n):
+    salvate = 0
+    for match in matches:
+        try:
+            h = match['homeTeam'].get('shortName') or match['homeTeam'].get('name', '?'); a = match['awayTeam'].get('shortName') or match['awayTeam'].get('name', '?')
+            h_cl, a_cl = clean_name(h), clean_name(a); m_id = match.get('id')
+            if not m_id: continue
+            try: match_date_str = (datetime.strptime(match['utcDate'], "%Y-%m-%dT%H:%M:%SZ") + timedelta(hours=2)).strftime("%d/%m/%Y %H:%M")
+            except: match_date_str = ""
+            h_s = team_stats.get(h_cl, {"att": 1.0, "def": 1.0}); a_s = team_stats.get(a_cl, {"att": 1.0, "def": 1.0})
+            h_exp = h_s["att"] * a_s["def"] * avg_h; a_exp = a_s["att"] * h_s["def"] * avg_a
+            m = get_full_poisson(h_exp, a_exp)
+            mercati = {f"Vittoria {h}": m["1"], "Pareggio": m["X"], f"Vittoria {a}": m["2"], "Over 2.5": 1 - m["u25"], "Under 2.5": m["u25"], "GG": m["gg"], "NG": 1 - m["gg"]}
+            best_mkt = max(mercati, key=mercati.get); best_prob = mercati[best_mkt]
+            pronostico_sicuro = f"{best_mkt} - {best_prob:.0%} - analisi automatica Poisson"
+            altri = sorted([(k, v) for k, v in mercati.items() if k != best_mkt], key=lambda x: -x[1])
+            top3 = [f"{i+1}. {k} - {v:.0%}" for i, (k, v) in enumerate(altri[:3])]
+            save_prediction_entry(m_id, h, a, camp_sel, giornata_n, match_date_str, pronostico_sicuro, top3, round(best_prob*100, 1), "")
+            salvate += 1
+        except: pass
+    return salvate
+
 # --- POPUP AI ---
 @st.dialog("STRATEGIC ANALYSIS", width="large")
 def show_details(h, a, m, camp_sel="Serie A"):
@@ -347,14 +369,12 @@ def show_details(h, a, m, camp_sel="Serie A"):
         prompt = f"""Sei Billy Walters. Analizza {h} vs {a}.
 PROBABILITA' MODELLO POISSON: 1: {p1:.0%} | X: {pX:.0%} | 2: {p2:.0%} | O2.5: {po25:.0%} | U2.5: {pu25:.0%} | GG: {pgg:.0%} | NG: {png:.0%}
 Il mercato matematicamente superiore è "{mercato_top}" al {prob_top:.0%}.
-PRONOSTICO SICURO: DEVI scrivere OBBLIGATORIAMENTE "{mercato_top} - prob {prob_top:.0%} - motivazione". NON scegliere altri mercati per il pronostico sicuro.
-TOP 3 MERCATI ALTERNATIVI: I 3 mercati con prob più alta dopo "{mercato_top}".
-RISULTATI ATTESI: Top 3 risultati esatti con probabilità."""
+PRONOSTICO SICURO: DEVI scrivere OBBLIGATORIAMENTE "{mercato_top} - prob {prob_top:.0%} - motivazione". NON scegliere altri mercati.
+TOP 3 MERCATI ALTERNATIVI: I 3 mercati con prob più alta dopo "{mercato_top}". LIVELLO DI CONFIDENZA: 1-10."""
         try:
             res = groq_client.chat.completions.create(model="llama-3.3-70b-versatile", messages=[{"role": "user", "content": prompt}], max_tokens=800)
             testo = res.choices[0].message.content.replace("**", "").replace("*", "")
             st.markdown(f"<div style='color:#1a1a1a; font-size:15px; line-height:1.6;'>{testo}</div>", unsafe_allow_html=True)
-            # Save logic
             pronostico_sicuro = ""; top3 = []; prob_sicuro = 0.0; in_sicuro = False; in_top3 = False
             for riga in testo.split("\n"):
                 rs = riga.strip()
@@ -362,8 +382,7 @@ RISULTATI ATTESI: Top 3 risultati esatti con probabilità."""
                 if rs.startswith("TOP 3"): in_top3 = True; in_sicuro = False; continue
                 if any(rs.startswith(s) for s in ["RISULTATI", "LIVELLO"]): in_sicuro = False; in_top3 = False
                 if in_sicuro and rs and not pronostico_sicuro:
-                    pronostico_sicuro = rs[:150]
-                    m_prob = re.search(r"(\d+)\%", rs)
+                    pronostico_sicuro = rs[:150]; m_prob = re.search(r"(\d+)\%", rs)
                     if m_prob: prob_sicuro = int(m_prob.group(1))
                 if in_top3 and rs and rs[0].isdigit(): top3.append(rs[:120])
             match_date_str = ""; m_id = match_id
@@ -379,7 +398,7 @@ RISULTATI ATTESI: Top 3 risultati esatti con probabilità."""
         except Exception as e: st.error(f"Errore AI: {e}")
 
 # --- UI PRINCIPALE ---
-st.markdown('<div class="maradona-header"><h1>M4 STRATEGIC TERMINAL</h1><p>Intelligence Evolution v32.0</p></div>', unsafe_allow_html=True)
+st.markdown('<div class="maradona-header"><h1>M4 STRATEGIC TERMINAL</h1><p>Intelligence Evolution v33.0</p></div>', unsafe_allow_html=True)
 map_odds = {"Serie A": "soccer_italy_serie_a", "Premier League": "soccer_epl", "La Liga": "soccer_spain_la_liga", "Bundesliga": "soccer_germany_bundesliga"}
 
 with st.sidebar:
@@ -387,7 +406,7 @@ with st.sidebar:
     camp_sel = st.selectbox("CAMPIONATO", ["Serie A", "Premier League", "La Liga", "Bundesliga"])
     try:
         xg_check = get_understat_xg(camp_sel)
-        st.markdown(f"<div style='font-size:12px; color:#28a745; font-weight:700;'>✅ xG caricati ({len(xg_check)} squadre)</div>" if xg_check and len(xg_check) > 0 else "<div style='font-size:12px; color:#dc3545; font-weight:700;'>⚠️ xG non disponibili</div>", unsafe_allow_html=True)
+        st.markdown(f"<div style='font-size:12px; color:#28a745; font-weight:700;'>✅ xG caricati ({len(xg_check)} squadre)</div>" if xg_check and len(xg_check) > 0 else "<div style='font-size:12px; color:#dc3545; font-weight:700;'>⚠️ xG non disponibili (uso medie storiche)</div>", unsafe_allow_html=True)
     except: pass
     camp_cached = st.session_state.get("live_camp", None); has_data = "live_data" in st.session_state and st.session_state.live_data and camp_cached == camp_sel
     col_s1, col_s2 = st.columns([2, 1])
@@ -400,17 +419,12 @@ with st.sidebar:
             st.session_state.live_data = resp.json().get('matches', []); st.session_state.live_camp = camp_sel
             try:
                 stand_resp = requests.get(f"https://api.football-data.org/v4/competitions/{l_map[camp_sel]}/standings", headers={"X-Auth-Token": API_KEY_DATA})
-                classifica = {}; 
+                classifica = {}
                 for row in stand_resp.json().get("standings", [])[0].get("table", []):
                     classifica[clean_name(row["team"].get("shortName") or row["team"].get("name", ""))] = {"pos": row["position"], "punti": row["points"], "pg": row["playedGames"], "gf": row["goalsFor"], "gs": row["goalsAgainst"], "forma": row.get("form", "")}
                 st.session_state.classifica = classifica
             except: pass
-            try:
-                odds_h2h = requests.get(f"https://api.the-odds-api.com/v4/sports/{map_odds[camp_sel]}/odds/", params={"apiKey": API_KEY_ODDS, "regions": "eu", "markets": "h2h"}).json()
-                odds_totals = requests.get(f"https://api.the-odds-api.com/v4/sports/{map_odds[camp_sel]}/odds/", params={"apiKey": API_KEY_ODDS, "regions": "eu", "markets": "totals"}).json()
-                st.session_state.live_odds = odds_h2h if isinstance(odds_h2h, list) else []; st.session_state.live_odds_totals = odds_totals if isinstance(odds_totals, list) else []
-            except: pass
-        except Exception as e: st.sidebar.error(f"Errore sincronizzazione: {e}")
+        except Exception as e: st.sidebar.error(f"Errore sync: {e}")
     if "live_data" in st.session_state and st.session_state.live_data:
         g_sel = st.selectbox("GIORNATA", sorted(list(set([m['matchday'] for m in st.session_state.live_data]))))
     else: g_sel = None
@@ -430,7 +444,7 @@ with tab1:
     for idx, match in enumerate(matches):
         h_api = match['homeTeam'].get('shortName') or match['homeTeam'].get('name', '?'); a_api = match['awayTeam'].get('shortName') or match['awayTeam'].get('name', '?')
         h_cl, a_cl = clean_name(h_api), clean_name(a_api)
-        dt = (datetime.strptime(match['utcDate'], "%Y-%m-%dT%H:%M:%SZ") + timedelta(hours=2)).strftime("%d/%m | %H:%M") # FIX ORA +2
+        dt = (datetime.strptime(match['utcDate'], "%Y-%m-%dT%H:%M:%SZ") + timedelta(hours=2)).strftime("%d/%m | %H:%M")
         h_s = team_stats.get(h_cl, {'att': 1.0, 'def': 1.0}); a_s = team_stats.get(a_cl, {'att': 1.0, 'def': 1.0})
         m = get_full_poisson(h_s['att'] * a_s['def'] * avg_h, a_s['att'] * h_s['def'] * avg_a)
         with st.container():
@@ -442,18 +456,18 @@ with tab1:
             with c5: st.markdown(f"<div class='stat-container'><span class='label-header'>GG / NG</span><b>{m['gg']:.0%}</b> / <b>{(1-m['gg']):.0%}</b></div>", unsafe_allow_html=True)
             with c6: st.write("<br>", unsafe_allow_html=True); st.button("🔍", key=f"ex_{idx}", on_click=show_details, args=(h_api, a_api, m, camp_sel))
             st.markdown("</div>", unsafe_allow_html=True)
- else: st.info("👋 Terminale Pronto. Sincronizza per caricare la giornata.")
+ else: st.info("👋 Terminale Pronto. Sincronizza il campionato per caricare le partite.")
 
 with tab2:
     st.subheader("🌟 Top 10 Analisi Mix Globale")
-    st.caption("Analizza la prossima giornata di tutti i campionati e mostra le 10 migliori probabilità in assoluto.")
+    st.caption("Analizza la prossima giornata di tutti i campionati e mostra le 10 migliori probabilità in assoluto, miste tra le leghe.")
     if st.button("🚀 Calcola Top 10 Globale", type="primary"):
         top_10 = fetch_and_calc_top_mix()
-        if not top_10: st.warning("Nessun dato trovato. Assicurati che i file storici CSV siano presenti per i campionati.")
+        if not top_10: st.warning("Nessun dato trovato. Assicurati di avere i file CSV storici nella cartella database.")
         else:
             salvate_count = 0
             for i, p in enumerate(top_10):
-                dt = (datetime.strptime(p['utcDate'], "%Y-%m-%dT%H:%M:%SZ") + timedelta(hours=2)).strftime("%d/%m %H:%M") # FIX ORA +2
+                dt = (datetime.strptime(p['utcDate'], "%Y-%m-%dT%H:%M:%SZ") + timedelta(hours=2)).strftime("%d/%m %H:%M")
                 st.markdown(f"""
                 <div class="top-mix-row">
                     <div style="flex: 1;"><b>#{i+1}</b> - {p['home']} vs {p['away']}<br>
@@ -461,13 +475,12 @@ with tab2:
                     <div style="text-align: right; color: #28a745; font-weight: 800; font-size: 18px;">{p['market']}<br><small>{p['prob_val']}%</small></div>
                 </div>
                 """, unsafe_allow_html=True)
-                # Salva nel registro
                 match_date_str = (datetime.strptime(p['utcDate'], "%Y-%m-%dT%H:%M:%SZ") + timedelta(hours=2)).strftime("%d/%m/%Y %H:%M")
                 pron = f"{p['market']} - {p['prob_val']}% - Top Mix Automatico"
                 if p.get('match_id'):
                     save_prediction_entry(p['match_id'], p['home'], p['away'], p['league'], p['giornata'], match_date_str, pron, [], p['prob_val'], "")
                     salvate_count += 1
-            st.success(f"✅ {salvate_count} pronostici Top Mix salvati automaticamente nel Registro!")
+            st.success(f"✅ {salvate_count} pronostici Top Mix salvati nel Registro!")
 
 with tab3:
     st.subheader("📒 Registro Predizioni")
