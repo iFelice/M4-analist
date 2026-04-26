@@ -113,7 +113,7 @@ def save_predictions(preds):
         payload = {"data": preds}
         json.dump(payload, f, ensure_ascii=False, indent=2)
 
-pdef standardizza_mercato(testo):
+def standardizza_mercato(testo):
     t = testo.lower()
     if "under 2.5" in t or "under2.5" in t: return "UNDER_2.5"
     if "over 2.5" in t or "over2.5" in t: return "OVER_2.5"
