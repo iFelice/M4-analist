@@ -14,6 +14,9 @@ GROQ_API_KEY = st.secrets.get("GROQ_API_KEY", "")
 API_KEY_ODDS = "a310fd7b74f24f2736a57c6caf768118"
 API_KEY_DATA = "c299e4a676a54d48a642f20bca7f4480"
 
+JSONBIN_API_KEY = st.secrets.get("JSONBIN_API_KEY", "")
+JSONBIN_BIN_ID = st.secrets.get("JSONBIN_BIN_ID", "")
+
 # Inizializzazione AI
 try:
     groq_client = Groq(api_key=GROQ_API_KEY) if GROQ_API_KEY else None
@@ -57,12 +60,7 @@ st.markdown(f"""
 # --- REGISTRO PREDIZIONI (CLOUD PERSISTENTE) ---
 PREDICTIONS_FILE = "database/predictions.json"
 
-# Configurazione Cloud
-JSONBIN_API_KEY = st.secrets.get("JSONBIN_API_KEY", "")
-JSONBIN_BIN_ID = st.secrets.get("JSONBIN_BIN_ID", "")
-
 def load_predictions():
-    # 1. Prova a caricare da Cloud (JSONBin) se configurato
     if JSONBIN_API_KEY and JSONBIN_BIN_ID:
         try:
             url = f"https://api.jsonbin.io/v3/b/{JSONBIN_BIN_ID}/latest"
@@ -70,16 +68,13 @@ def load_predictions():
             r = requests.get(url, headers=headers, timeout=5)
             if r.status_code == 200:
                 record = r.json().get("record", {})
-                # Se il record è un dizionario (nuovo formato), estrai "data"
                 if isinstance(record, dict) and "data" in record:
                     return record["data"]
-                # Se per qualche motivo è ancora una lista (vecchio formato)
                 elif isinstance(record, list):
                     return record
         except:
-            pass # Se il cloud fallisce, fallback in locale
+            pass
     
-    # 2. Fallback Locale
     if os.path.exists(PREDICTIONS_FILE):
         try:
             with open(PREDICTIONS_FILE, "r", encoding="utf-8") as f:
@@ -93,7 +88,6 @@ def load_predictions():
     return []
 
 def save_predictions(preds):
-    # 1. Salva su Cloud (JSONBin) se configurato
     if JSONBIN_API_KEY and JSONBIN_BIN_ID:
         try:
             url = f"https://api.jsonbin.io/v3/b/{JSONBIN_BIN_ID}"
@@ -101,13 +95,11 @@ def save_predictions(preds):
                 "X-Master-Key": JSONBIN_API_KEY, 
                 "Content-Type": "application/json"
             }
-            # Avvolgiamo l'array in un oggetto per evitare l'errore "bin cannot be blank"
             payload = {"data": preds}
             requests.put(url, json=payload, headers=headers, timeout=5)
         except:
-            pass # Se il cloud fallisce, salva almeno in locale
+            pass
     
-    # 2. Salva sempre anche in locale come backup (stesso formato)
     os.makedirs("database", exist_ok=True)
     with open(PREDICTIONS_FILE, "w", encoding="utf-8") as f:
         payload = {"data": preds}
@@ -405,6 +397,7 @@ def get_team_fd_id(team_name, camp_sel):
                 return team["id"]
     return None
 
+@st.cache_data(ttl=3600) # Cache: 1 ora per non bloccare l'API
 def get_ultimi_risultati_fd(team_id, camp_sel, n=5):
     l_map = {"Serie A": "SA", "Premier League": "PL", "La Liga": "PD", "Bundesliga": "BL1", "Ligue 1": "FL1"}
     comp = l_map.get(camp_sel, "SA")
@@ -429,6 +422,64 @@ def get_ultimi_risultati_fd(team_id, camp_sel, n=5):
         return risultati
     except:
         return []
+
+# Funzione estratta e cachata per evitare limiti API
+@st.cache_data(ttl=3600)
+def get_infraset_data(team_id, camp_code, match_date_str, now_utc_str):
+    match_date = datetime.fromisoformat(match_date_str)
+    now_utc = datetime.fromisoformat(now_utc_str)
+    window_start = match_date - timedelta(days=7)
+    giocate = []
+    programmate = []
+    try:
+        r_fin = requests.get(
+            f"https://api.football-data.org/v4/teams/{team_id}/matches",
+            headers={"X-Auth-Token": API_KEY_DATA},
+            params={"status": "FINISHED", "limit": 10}
+        )
+        for match in r_fin.json().get("matches", []):
+            comp_code = match.get("competition", {}).get("code", "")
+            comp_name = match.get("competition", {}).get("name", "")
+            if comp_code == camp_code:
+                continue
+            utc_date = match.get("utcDate", "")
+            try:
+                match_dt = datetime.fromisoformat(utc_date.replace("Z", "+00:00"))
+            except:
+                continue
+            if match_dt < window_start or match_dt >= match_date:
+                continue
+            gh = match["score"]["fullTime"].get("home")
+            ga = match["score"]["fullTime"].get("away")
+            if gh is None or ga is None:
+                continue
+            home = match["homeTeam"].get("shortName") or match["homeTeam"].get("name", "?")
+            away = match["awayTeam"].get("shortName") or match["awayTeam"].get("name", "?")
+            giocate.append(f"{match_dt.strftime('%d/%m')} {comp_name}: {home} {gh}-{ga} {away}")
+
+        r_prg = requests.get(
+            f"https://api.football-data.org/v4/teams/{team_id}/matches",
+            headers={"X-Auth-Token": API_KEY_DATA},
+            params={"status": "SCHEDULED,TIMED", "limit": 5}
+        )
+        for match in r_prg.json().get("matches", []):
+            comp_code = match.get("competition", {}).get("code", "")
+            comp_name = match.get("competition", {}).get("name", "")
+            if comp_code == camp_code:
+                continue
+            utc_date = match.get("utcDate", "")
+            try:
+                match_dt = datetime.fromisoformat(utc_date.replace("Z", "+00:00"))
+            except:
+                continue
+            if match_dt >= match_date or match_dt <= now_utc:
+                continue
+            home = match["homeTeam"].get("shortName") or match["homeTeam"].get("name", "?")
+            away = match["awayTeam"].get("shortName") or match["awayTeam"].get("name", "?")
+            programmate.append(f"[IN PROGRAMMA {match_dt.strftime('%d/%m')}] {comp_name}: {home} vs {away}")
+    except:
+        pass
+    return giocate, programmate
 
 def get_contesto_partita(h, a, camp_sel):
     h_id = get_team_fd_id(h, camp_sel)
@@ -472,70 +523,16 @@ def get_contesto_partita(h, a, camp_sel):
     if not match_date:
         match_date = now_utc
 
-    window_start = match_date - timedelta(days=7)
-
-    def get_infraset(team_id):
-        giocate = []
-        programmate = []
-        try:
-            r_fin = requests.get(
-                f"https://api.football-data.org/v4/teams/{team_id}/matches",
-                headers={"X-Auth-Token": API_KEY_DATA},
-                params={"status": "FINISHED", "limit": 10}
-            )
-            for match in r_fin.json().get("matches", []):
-                comp_code = match.get("competition", {}).get("code", "")
-                comp_name = match.get("competition", {}).get("name", "")
-                if comp_code == camp_code:
-                    continue
-                utc_date = match.get("utcDate", "")
-                try:
-                    match_dt = datetime.fromisoformat(utc_date.replace("Z", "+00:00"))
-                except:
-                    continue
-                if match_dt < window_start or match_dt >= match_date:
-                    continue
-                gh = match["score"]["fullTime"].get("home")
-                ga = match["score"]["fullTime"].get("away")
-                if gh is None or ga is None:
-                    continue
-                home = match["homeTeam"].get("shortName") or match["homeTeam"].get("name", "?")
-                away = match["awayTeam"].get("shortName") or match["awayTeam"].get("name", "?")
-                giocate.append(f"{match_dt.strftime('%d/%m')} {comp_name}: {home} {gh}-{ga} {away}")
-
-            r_prg = requests.get(
-                f"https://api.football-data.org/v4/teams/{team_id}/matches",
-                headers={"X-Auth-Token": API_KEY_DATA},
-                params={"status": "SCHEDULED,TIMED", "limit": 5}
-            )
-            for match in r_prg.json().get("matches", []):
-                comp_code = match.get("competition", {}).get("code", "")
-                comp_name = match.get("competition", {}).get("name", "")
-                if comp_code == camp_code:
-                    continue
-                utc_date = match.get("utcDate", "")
-                try:
-                    match_dt = datetime.fromisoformat(utc_date.replace("Z", "+00:00"))
-                except:
-                    continue
-                if match_dt >= match_date or match_dt <= now_utc:
-                    continue
-                home = match["homeTeam"].get("shortName") or match["homeTeam"].get("name", "?")
-                away = match["awayTeam"].get("shortName") or match["awayTeam"].get("name", "?")
-                programmate.append(f"[IN PROGRAMMA {match_dt.strftime('%d/%m')}] {comp_name}: {home} vs {away}")
-        except:
-            pass
-        return giocate, programmate
-
     if h_id:
-        h_giot, h_prog = get_infraset(h_id)
+        h_giot, h_prog = get_infraset_data(h_id, camp_code, match_date.isoformat(), now_utc.isoformat())
         contesto["h_infraset"] = h_giot
         contesto["h_infraset_prog"] = h_prog
     else:
         contesto["h_infraset"] = []
         contesto["h_infraset_prog"] = []
+        
     if a_id:
-        a_giot, a_prog = get_infraset(a_id)
+        a_giot, a_prog = get_infraset_data(a_id, camp_code, match_date.isoformat(), now_utc.isoformat())
         contesto["a_infraset"] = a_giot
         contesto["a_infraset_prog"] = a_prog
     else:
@@ -552,6 +549,10 @@ def show_details(h, a, m, camp_sel="Serie A"):
         return
     with st.spinner("Billy Walters sta analizzando..."):
         contesto, match_id = get_contesto_partita(h, a, camp_sel)
+        
+        # Avviso se API è bloccata
+        if not contesto.get("h_risultati") and not contesto.get("a_risultati"):
+            st.warning("⚠️ Impossibile scaricare i risultati recenti (possibile limite API raggiunto). L'analisi sarà basata solo su statistiche storiche e xG.")
 
         news_extra = ""
         try:
@@ -599,7 +600,6 @@ def show_details(h, a, m, camp_sel="Serie A"):
         pgg = m_adj['gg']
         png = 1 - m_adj['gg']
 
-        # TROVIAMO MATEMATICAMENTE IL MERCATO PIU' ALTO PER IMPORLO ALL'AI
         mercati_calcolati = {
             f"Vittoria {h}": p1,
             "Pareggio": pX,
@@ -897,7 +897,7 @@ def analisi_rapida_giornata(matches, team_stats, avg_h, avg_a, camp_sel, classif
 
 
 # --- UI PRINCIPALE ---
-st.markdown('<div class="maradona-header"><h1>M4 STRATEGIC TERMINAL</h1><p>Intelligence Evolution v29.1</p></div>', unsafe_allow_html=True)
+st.markdown('<div class="maradona-header"><h1>M4 STRATEGIC TERMINAL</h1><p>Intelligence Evolution v31.0</p></div>', unsafe_allow_html=True)
 
 map_odds = {
     "Serie A": "soccer_italy_serie_a",
@@ -1073,6 +1073,14 @@ with tab1:
 with tab2:
     st.subheader("📒 Registro Predizioni")
     
+    # Pulsante Svuota Registro
+    col_reset, _ = st.columns([1, 5])
+    with col_reset:
+        if st.button("🗑️ Svuota Registro", type="secondary"):
+            save_predictions([])
+            st.success("Registro svuotato con successo!")
+            st.rerun()
+            
     try:
         n_agg = aggiorna_risultati_reali(API_KEY_DATA)
         if n_agg > 0:
