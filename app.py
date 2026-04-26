@@ -54,24 +54,66 @@ st.markdown(f"""
     </style>
     """, unsafe_allow_html=True)
 
-# --- REGISTRO PREDIZIONI ---
+# --- REGISTRO PREDIZIONI (CLOUD PERSISTENTE) ---
 PREDICTIONS_FILE = "database/predictions.json"
 
+# Configurazione Cloud
+JSONBIN_API_KEY = st.secrets.get("JSONBIN_API_KEY", "")
+JSONBIN_BIN_ID = st.secrets.get("JSONBIN_BIN_ID", "")
+
 def load_predictions():
+    # 1. Prova a caricare da Cloud (JSONBin) se configurato
+    if JSONBIN_API_KEY and JSONBIN_BIN_ID:
+        try:
+            url = f"https://api.jsonbin.io/v3/b/{JSONBIN_BIN_ID}/latest"
+            headers = {"X-Master-Key": JSONBIN_API_KEY}
+            r = requests.get(url, headers=headers, timeout=5)
+            if r.status_code == 200:
+                record = r.json().get("record", {})
+                # Se il record è un dizionario (nuovo formato), estrai "data"
+                if isinstance(record, dict) and "data" in record:
+                    return record["data"]
+                # Se per qualche motivo è ancora una lista (vecchio formato)
+                elif isinstance(record, list):
+                    return record
+        except:
+            pass # Se il cloud fallisce, fallback in locale
+    
+    # 2. Fallback Locale
     if os.path.exists(PREDICTIONS_FILE):
         try:
             with open(PREDICTIONS_FILE, "r", encoding="utf-8") as f:
-                return json.load(f)
+                data = json.load(f)
+                if isinstance(data, dict) and "data" in data:
+                    return data["data"]
+                elif isinstance(data, list):
+                    return data
         except:
             return []
     return []
 
 def save_predictions(preds):
+    # 1. Salva su Cloud (JSONBin) se configurato
+    if JSONBIN_API_KEY and JSONBIN_BIN_ID:
+        try:
+            url = f"https://api.jsonbin.io/v3/b/{JSONBIN_BIN_ID}"
+            headers = {
+                "X-Master-Key": JSONBIN_API_KEY, 
+                "Content-Type": "application/json"
+            }
+            # Avvolgiamo l'array in un oggetto per evitare l'errore "bin cannot be blank"
+            payload = {"data": preds}
+            requests.put(url, json=payload, headers=headers, timeout=5)
+        except:
+            pass # Se il cloud fallisce, salva almeno in locale
+    
+    # 2. Salva sempre anche in locale come backup (stesso formato)
     os.makedirs("database", exist_ok=True)
     with open(PREDICTIONS_FILE, "w", encoding="utf-8") as f:
-        json.dump(preds, f, ensure_ascii=False, indent=2)
+        payload = {"data": preds}
+        json.dump(payload, f, ensure_ascii=False, indent=2)
 
-def standardizza_mercato(testo):
+pdef standardizza_mercato(testo):
     t = testo.lower()
     if "under 2.5" in t or "under2.5" in t: return "UNDER_2.5"
     if "over 2.5" in t or "over2.5" in t: return "OVER_2.5"
