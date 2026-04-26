@@ -282,12 +282,9 @@ def get_contesto_partita(h, a, camp_sel):
     match_date = now_utc = datetime.now(timezone.utc); match_id_found = None
     for mx in st.session_state.get("live_data", []):
         if clean_name(h) in clean_name(mx["homeTeam"].get("shortName", "") or mx["homeTeam"].get("name", "")):
-            try: 
-                match_date = datetime.fromisoformat(mx["utcDate"].replace("Z", "+00:00"))
-                match_id_found = mx["id"]
-            except: 
-                pass
-            break # FIX: Break correttamente fuori dal try/except
+            try: match_date = datetime.fromisoformat(mx["utcDate"].replace("Z", "+00:00")); match_id_found = mx["id"]
+            except: pass
+            break
     if h_id: contesto["h_infraset"], contesto["h_infraset_prog"] = get_infraset_data(h_id, camp_code, match_date.isoformat(), now_utc.isoformat())
     if a_id: contesto["a_infraset"], contesto["a_infraset_prog"] = get_infraset_data(a_id, camp_code, match_date.isoformat(), now_utc.isoformat())
     return contesto, match_id_found
@@ -295,11 +292,14 @@ def get_contesto_partita(h, a, camp_sel):
 # --- TOP MIX LOGIC ---
 @st.cache_data(ttl=1800, show_spinner="Calcolando Top 10 Globale...")
 def fetch_and_calc_top_mix():
-    all_preds = []; leagues = ["Serie A", "Premier League", "La Liga", "Bundesliga"]
+    all_preds = []; missing_leagues = []
+    leagues = ["Serie A", "Premier League", "La Liga", "Bundesliga"]
     l_map = {"Serie A": "SA", "Premier League": "PL", "La Liga": "PD", "Bundesliga": "BL1"}
     for league in leagues:
         engine = get_league_engine(league)
-        if not engine: continue
+        if not engine: 
+            missing_leagues.append(league)
+            continue
         team_stats, avg_h, avg_a, _ = engine
         try:
             r = requests.get(f"https://api.football-data.org/v4/competitions/{l_map[league]}/matches?status=TIMED,SCHEDULED", headers={'X-Auth-Token': API_KEY_DATA})
@@ -317,7 +317,9 @@ def fetch_and_calc_top_mix():
             mercati = {f"Vittoria {h}": m_poisson["1"], "Pareggio": m_poisson["X"], f"Vittoria {a}": m_poisson["2"], "Over 2.5": 1 - m_poisson["u25"], "Under 2.5": m_poisson["u25"], "GG": m_poisson["gg"], "NG": 1 - m_poisson["gg"]}
             best_mkt = max(mercati, key=mercati.get); best_prob = mercati[best_mkt]
             all_preds.append({"league": league, "giornata": g_next, "home": h, "away": a, "match_id": match.get("id"), "utcDate": match['utcDate'], "market": best_mkt, "prob": best_prob, "prob_val": round(best_prob * 100, 1)})
-    return sorted(all_preds, key=lambda x: x['prob'], reverse=True)[:10]
+    
+    # Ordina e ritorna i top 10, e la lista di chi è saltato
+    return sorted(all_preds, key=lambda x: x['prob'], reverse=True)[:10], missing_leagues
 
 # --- ANALISI RAPIDA ---
 def analisi_rapida_giornata(matches, team_stats, avg_h, avg_a, camp_sel, classifica_sess, giornata_n):
@@ -332,183 +334,4 @@ def analisi_rapida_giornata(matches, team_stats, avg_h, avg_a, camp_sel, classif
             h_s = team_stats.get(h_cl, {"att": 1.0, "def": 1.0}); a_s = team_stats.get(a_cl, {"att": 1.0, "def": 1.0})
             h_exp = h_s["att"] * a_s["def"] * avg_h; a_exp = a_s["att"] * h_s["def"] * avg_a
             m = get_full_poisson(h_exp, a_exp)
-            mercati = {f"Vittoria {h}": m["1"], "Pareggio": m["X"], f"Vittoria {a}": m["2"], "Over 2.5": 1 - m["u25"], "Under 2.5": m["u25"], "GG": m["gg"], "NG": 1 - m["gg"]}
-            best_mkt = max(mercati, key=mercati.get); best_prob = mercati[best_mkt]
-            pronostico_sicuro = f"{best_mkt} - {best_prob:.0%} - analisi automatica Poisson"
-            altri = sorted([(k, v) for k, v in mercati.items() if k != best_mkt], key=lambda x: -x[1])
-            top3 = [f"{i+1}. {k} - {v:.0%}" for i, (k, v) in enumerate(altri[:3])]
-            save_prediction_entry(m_id, h, a, camp_sel, giornata_n, match_date_str, pronostico_sicuro, top3, round(best_prob*100, 1), "")
-            salvate += 1
-        except: pass
-    return salvate
-
-# --- POPUP AI ---
-@st.dialog("STRATEGIC ANALYSIS", width="large")
-def show_details(h, a, m, camp_sel="Serie A"):
-    if not groq_client: st.error("Billy non e' configurato."); return
-    with st.spinner("Billy Walters sta analizzando..."):
-        contesto, match_id = get_contesto_partita(h, a, camp_sel)
-        if not contesto.get("h_risultati") and not contesto.get("a_risultati"): st.warning("⚠️ API limit: analisi basata solo su storici e xG.")
-        classifica_sess = st.session_state.get("classifica", {}); h_cl_key = clean_name(h); a_cl_key = clean_name(a)
-        h_stand_s = classifica_sess.get(h_cl_key, {}); a_stand_s = classifica_sess.get(a_cl_key, {})
-        giornata_corrente = st.session_state.get("live_data", [{}])[0].get("matchday") if st.session_state.get("live_data") else None
-        h_mult_att, h_mult_def, h_note_seg = calcola_segnali(contesto.get("h_risultati", []), contesto.get("h_infraset", []), contesto.get("h_infraset_prog", []), h_stand_s, giornata=giornata_corrente, tutte_stand=classifica_sess)
-        a_mult_att, a_mult_def, a_note_seg = calcola_segnali(contesto.get("a_risultati", []), contesto.get("a_infraset", []), contesto.get("a_infraset_prog", []), a_stand_s, giornata=giornata_corrente, tutte_stand=classifica_sess)
-        engine_data = get_league_engine(camp_sel)
-        if engine_data:
-            team_stats_p, avg_h_p, avg_a_p, _ = engine_data; h_s_p = team_stats_p.get(h_cl_key, {"att": 1.0, "def": 1.0}); a_s_p = team_stats_p.get(a_cl_key, {"att": 1.0, "def": 1.0})
-            h_exp = h_s_p["att"] * h_mult_att * a_s_p["def"] * a_mult_def * avg_h_p; a_exp = a_s_p["att"] * a_mult_att * h_s_p["def"] * h_mult_def * avg_a_p
-        else: h_exp = 1.3; a_exp = 1.1
-        m_adj = get_full_poisson(h_exp, a_exp)
-        p1, pX, p2, po25, pu25, pgg, png = m_adj['1'], m_adj['X'], m_adj['2'], 1 - m_adj['u25'], m_adj['u25'], m_adj['gg'], 1 - m_adj['gg']
-        mercati_calcolati = {f"Vittoria {h}": p1, "Pareggio": pX, f"Vittoria {a}": p2, "Over 2.5": po25, "Under 2.5": pu25, "GG": pgg, "NG": png}
-        mercato_top = max(mercati_calcolati, key=mercati_calcolati.get); prob_top = mercati_calcolati[mercato_top]
-        score_probs = sorted([(i, j, poisson.pmf(i, h_exp) * poisson.pmf(j, a_exp)) for i in range(6) for j in range(6)], key=lambda x: -x[2])
-        risultati_str = "\n".join([f"  {h} {g[0]}-{g[1]} {a}: {g[2]:.1%}" for g in score_probs[:6]])
-        prompt = f"""Sei Billy Walters. Analizza {h} vs {a}.
-PROBABILITA' MODELLO POISSON: 1: {p1:.0%} | X: {pX:.0%} | 2: {p2:.0%} | O2.5: {po25:.0%} | U2.5: {pu25:.0%} | GG: {pgg:.0%} | NG: {png:.0%}
-Il mercato matematicamente superiore è "{mercato_top}" al {prob_top:.0%}.
-PRONOSTICO SICURO: DEVI scrivere OBBLIGATORIAMENTE "{mercato_top} - prob {prob_top:.0%} - motivazione". NON scegliere altri mercati.
-TOP 3 MERCATI ALTERNATIVI: I 3 mercati con prob più alta dopo "{mercato_top}". LIVELLO DI CONFIDENZA: 1-10."""
-        try:
-            res = groq_client.chat.completions.create(model="llama-3.3-70b-versatile", messages=[{"role": "user", "content": prompt}], max_tokens=800)
-            testo = res.choices[0].message.content.replace("**", "").replace("*", "")
-            st.markdown(f"<div style='color:#1a1a1a; font-size:15px; line-height:1.6;'>{testo}</div>", unsafe_allow_html=True)
-            pronostico_sicuro = ""; top3 = []; prob_sicuro = 0.0; in_sicuro = False; in_top3 = False
-            for riga in testo.split("\n"):
-                rs = riga.strip()
-                if rs.startswith("PRONOSTICO SICURO"): in_sicuro = True; in_top3 = False; continue
-                if rs.startswith("TOP 3"): in_top3 = True; in_sicuro = False; continue
-                if any(rs.startswith(s) for s in ["RISULTATI", "LIVELLO"]): in_sicuro = False; in_top3 = False
-                if in_sicuro and rs and not pronostico_sicuro:
-                    pronostico_sicuro = rs[:150]; m_prob = re.search(r"(\d+)\%", rs)
-                    if m_prob: prob_sicuro = int(m_prob.group(1))
-                if in_top3 and rs and rs[0].isdigit(): top3.append(rs[:120])
-            match_date_str = ""; m_id = match_id
-            if not m_id:
-                for mx in st.session_state.get("live_data", []):
-                    if clean_name(h) in clean_name(mx["homeTeam"].get("shortName", "") or mx["homeTeam"].get("name","")):
-                        m_id = mx.get("id")
-                        try: match_date_str = (datetime.strptime(mx["utcDate"], "%Y-%m-%dT%H:%M:%SZ") + timedelta(hours=2)).strftime("%d/%m/%Y %H:%M")
-                        except: pass
-                        break # FIX: Break posizionato correttamente
-            if pronostico_sicuro and m_id:
-                giornata_p = st.session_state.get("live_data", [{}])[0].get("matchday", 0) if st.session_state.get("live_data") else 0
-                save_prediction_entry(m_id, h, a, camp_sel, giornata_p, match_date_str, pronostico_sicuro, top3, prob_sicuro, risultati_str)
-        except Exception as e: st.error(f"Errore AI: {e}")
-
-# --- UI PRINCIPALE ---
-st.markdown('<div class="maradona-header"><h1>M4 STRATEGIC TERMINAL</h1><p>Intelligence Evolution v34.0</p></div>', unsafe_allow_html=True)
-map_odds = {"Serie A": "soccer_italy_serie_a", "Premier League": "soccer_epl", "La Liga": "soccer_spain_la_liga", "Bundesliga": "soccer_germany_bundesliga"}
-
-with st.sidebar:
-    st.title("🎩 Billy Walters Chat")
-    camp_sel = st.selectbox("CAMPIONATO", ["Serie A", "Premier League", "La Liga", "Bundesliga"])
-    try:
-        xg_check = get_understat_xg(camp_sel)
-        if xg_check and len(xg_check) > 0:
-            st.markdown(f"<div style='font-size:12px; color:#28a745; font-weight:700;'>✅ xG caricati ({len(xg_check)} squadre)</div>", unsafe_allow_html=True)
-        else:
-            st.markdown("<div style='font-size:12px; color:#dc3545; font-weight:700;'>⚠️ xG non disponibili (uso medie storiche)</div>", unsafe_allow_html=True)
-    except: pass
-    
-    # FIX: Convertiamo has_data in booleano puro per evitare TypeError nel bottone
-    camp_cached = st.session_state.get("live_camp", None)
-    has_data = bool("live_data" in st.session_state and st.session_state.get("live_data") and camp_cached == camp_sel)
-    
-    col_s1, col_s2 = st.columns([2, 1])
-    with col_s1: do_sync = st.button("🔄 SINCRONIZZA TURNO", disabled=has_data)
-    with col_s2: do_refresh = st.button("↺ Refresh")
-    if do_sync or do_refresh:
-        l_map = {"Serie A": "SA", "Premier League": "PL", "La Liga": "PD", "Bundesliga": "BL1"}
-        try:
-            resp = requests.get(f"https://api.football-data.org/v4/competitions/{l_map[camp_sel]}/matches?status=TIMED,SCHEDULED", headers={'X-Auth-Token': API_KEY_DATA})
-            st.session_state.live_data = resp.json().get('matches', []); st.session_state.live_camp = camp_sel
-            try:
-                stand_resp = requests.get(f"https://api.football-data.org/v4/competitions/{l_map[camp_sel]}/standings", headers={"X-Auth-Token": API_KEY_DATA})
-                classifica = {}
-                for row in stand_resp.json().get("standings", [])[0].get("table", []):
-                    classifica[clean_name(row["team"].get("shortName") or row["team"].get("name", ""))] = {"pos": row["position"], "punti": row["points"], "pg": row["playedGames"], "gf": row["goalsFor"], "gs": row["goalsAgainst"], "forma": row.get("form", "")}
-                st.session_state.classifica = classifica
-            except: pass
-        except Exception as e: st.sidebar.error(f"Errore sync: {e}")
-    if "live_data" in st.session_state and st.session_state.live_data:
-        g_sel = st.selectbox("GIORNATA", sorted(list(set([m['matchday'] for m in st.session_state.live_data]))))
-    else: g_sel = None
-
-engine = get_league_engine(camp_sel)
-tab1, tab2, tab3 = st.tabs(["🏟️ PARTITE", "🌟 TOP MIX", "📒 REGISTRO"])
-
-with tab1:
- if 'live_data' in st.session_state and engine and g_sel is not None:
-    team_stats, avg_h, avg_a, df_full = engine; matches = [m for m in st.session_state.live_data if m['matchday'] == g_sel]
-    col_title, col_btn = st.columns([4, 1])
-    with col_title: st.subheader(f"🏟️ {camp_sel.upper()} - GIORNATA {g_sel}")
-    with col_btn:
-        if st.button("⚡ Analisi Rapida"):
-            with st.spinner("Calcolo..."): n = analisi_rapida_giornata(matches, team_stats, avg_h, avg_a, camp_sel, st.session_state.get("classifica", {}), g_sel)
-            st.success(f"✅ {n} partite analizzate e salvate!")
-    for idx, match in enumerate(matches):
-        h_api = match['homeTeam'].get('shortName') or match['homeTeam'].get('name', '?'); a_api = match['awayTeam'].get('shortName') or match['awayTeam'].get('name', '?')
-        h_cl, a_cl = clean_name(h_api), clean_name(a_api)
-        dt = (datetime.strptime(match['utcDate'], "%Y-%m-%dT%H:%M:%SZ") + timedelta(hours=2)).strftime("%d/%m | %H:%M")
-        h_s = team_stats.get(h_cl, {'att': 1.0, 'def': 1.0}); a_s = team_stats.get(a_cl, {'att': 1.0, 'def': 1.0})
-        m = get_full_poisson(h_s['att'] * a_s['def'] * avg_h, a_s['att'] * h_s['def'] * avg_a)
-        with st.container():
-            st.markdown('<div class="match-card">', unsafe_allow_html=True)
-            c_h, c1, c3, c5, c6 = st.columns([1.5, 1.2, 0.8, 1, 0.4])
-            with c_h: st.markdown(f"<span class='team-name'>{h_api}<br>{a_api}</span><br><span class='match-date'>🕒 {dt}</span>", unsafe_allow_html=True)
-            with c1: st.markdown(f"<div class='stat-container'><span class='label-header'>Esito 1X2</span><div style='display:flex; justify-content:space-around'><div>1<br><b>{m['1']:.0%}</b></div><div>X<br><b>{m['X']:.0%}</b></div><div>2<br><b>{m['2']:.0%}</b></div></div></div>", unsafe_allow_html=True)
-            with c3: st.markdown(f"<div class='stat-container'><span class='label-header'>U/O 2.5</span><b>{m['u25']:.0%}</b> / <b>{(1-m['u25']):.0%}</b></div>", unsafe_allow_html=True)
-            with c5: st.markdown(f"<div class='stat-container'><span class='label-header'>GG / NG</span><b>{m['gg']:.0%}</b> / <b>{(1-m['gg']):.0%}</b></div>", unsafe_allow_html=True)
-            with c6: st.write("<br>", unsafe_allow_html=True); st.button("🔍", key=f"ex_{idx}", on_click=show_details, args=(h_api, a_api, m, camp_sel))
-            st.markdown("</div>", unsafe_allow_html=True)
- else: st.info("👋 Terminale Pronto. Sincronizza il campionato per caricare le partite.")
-
-with tab2:
-    st.subheader("🌟 Top 10 Analisi Mix Globale")
-    st.caption("Analizza la prossima giornata di tutti i campionati e mostra le 10 migliori probabilità in assoluto, miste tra le leghe.")
-    if st.button("🚀 Calcola Top 10 Globale", type="primary"):
-        top_10 = fetch_and_calc_top_mix()
-        if not top_10: st.warning("Nessun dato trovato. Assicurati di avere i file CSV storici nella cartella database.")
-        else:
-            salvate_count = 0
-            for i, p in enumerate(top_10):
-                dt = (datetime.strptime(p['utcDate'], "%Y-%m-%dT%H:%M:%SZ") + timedelta(hours=2)).strftime("%d/%m %H:%M")
-                st.markdown(f"""
-                <div class="top-mix-row">
-                    <div style="flex: 1;"><b>#{i+1}</b> - {p['home']} vs {p['away']}<br>
-                    <small>🏆 {p['league']} G{p['giornata']} | 🕒 {dt}</small></div>
-                    <div style="text-align: right; color: #28a745; font-weight: 800; font-size: 18px;">{p['market']}<br><small>{p['prob_val']}%</small></div>
-                </div>
-                """, unsafe_allow_html=True)
-                match_date_str = (datetime.strptime(p['utcDate'], "%Y-%m-%dT%H:%M:%SZ") + timedelta(hours=2)).strftime("%d/%m/%Y %H:%M")
-                pron = f"{p['market']} - {p['prob_val']}% - Top Mix Automatico"
-                if p.get('match_id'):
-                    save_prediction_entry(p['match_id'], p['home'], p['away'], p['league'], p['giornata'], match_date_str, pron, [], p['prob_val'], "")
-                    salvate_count += 1
-            st.success(f"✅ {salvate_count} pronostici Top Mix salvati nel Registro!")
-
-with tab3:
-    st.subheader("📒 Registro Predizioni")
-    col_reset, _ = st.columns([1, 5])
-    with col_reset:
-        if st.button("🗑️ Svuota Registro", type="secondary"): save_predictions([]); st.success("Registro svuotato!"); st.rerun()
-    try:
-        n_agg = aggiorna_risultati_reali(API_KEY_DATA)
-        if n_agg > 0: st.toast(f"✅ {n_agg} risultati aggiornati!")
-    except: pass
-    preds = load_predictions()
-    if not preds: st.info("Nessuna predizione salvata.")
-    else:
-        totale = len(preds); ok = sum(1 for p in preds if p.get("esito") == "✅"); ko = sum(1 for p in preds if p.get("esito") == "❌")
-        c1, c2, c3, c4 = st.columns(4); c1.metric("Totale", totale); c2.metric("✅ Corretti", ok); c3.metric("❌ Errati", ko); c4.metric("Accuracy", f"{(ok/(ok+ko))*100:.1f}%" if (ok+ko)>0 else "—")
-        st.divider()
-        for p in sorted(preds, key=lambda x: x.get("data", ""), reverse=True):
-            esito = p.get("esito") or "⏳"; risultato = p.get("risultato_reale") or "—"
-            col_e, col_p, col_r = st.columns([0.5, 3, 1])
-            col_e.markdown(f"<div style='font-size:22px;text-align:center'>{esito}</div>", unsafe_allow_html=True)
-            with col_p:
-                st.markdown(f"**{p.get('home')} vs {p.get('away')}** — G{p.get('giornata')} {p.get('campionato')} — {p.get('data','')}")
-                st.markdown(f"🎯 *{p.get('pronostico_sicuro','')}*")
-            col_r.markdown(f"**{risultato}**"); st.divider()
+            mercati = {f"Vittoria {h}": m["1"], "Pareggio": m["X"], f"Vittoria {a}": m["2"], "Over 2.5": 1 - m["u25"], "Under 2.5": m["u25
