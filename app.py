@@ -254,9 +254,19 @@ def get_team_fd_id(team_name, camp_sel):
 
 @st.cache_data(ttl=3600)
 def get_ultimi_risultati_fd(team_id, camp_sel, n=5):
-    comp = {"Serie A": "SA", "Premier League": "PL", "La Liga": "PD", "Bundesliga": "BL1"}.get(camp_sel, "SA")
     try:
-        r = requests.get(f"https://api.football-data.org/v4/teams/{team_id}/matches", headers={"X-Auth-Token": API_KEY_DATA}, params={"status": "FINISHED", "limit": 15, "competitions": comp})
+        r = requests.get(
+            f"https://api.football-data.org/v4/teams/{team_id}/matches",
+            headers={"X-Auth-Token": API_KEY_DATA},
+            # Rimosso il filtro competizioni: così trova partite anche se la squadra gioca in Serie B o Coppe
+            params={"status": "FINISHED", "limit": 10} 
+        )
+        
+        # Controllo limite richieste API (10/minuto)
+        if r.status_code == 429:
+            st.warning("⏳ Limite API raggiunto (10 richieste/minuto). Attendi 60 secondi e riprova.")
+            return ["LIMITE_API"]
+            
         risultati = []
         for match in r.json().get("matches", [])[-n:]:
             gh = match["score"]["fullTime"]["home"]; ga = match["score"]["fullTime"]["away"]; winner = match["score"]["winner"]
@@ -267,7 +277,7 @@ def get_ultimi_risultati_fd(team_id, camp_sel, n=5):
             risultati.append(f"{match['homeTeam'].get('shortName','?')} {gh}-{ga} {match['awayTeam'].get('shortName','?')} ({esito})")
         return risultati
     except: return []
-
+        
 @st.cache_data(ttl=3600)
 def get_infraset_data(team_id, camp_code, match_date_str, now_utc_str):
     match_date = datetime.fromisoformat(match_date_str); now_utc = datetime.fromisoformat(now_utc_str)
@@ -367,7 +377,16 @@ def show_details(h, a, m, camp_sel="Serie A"):
     if not groq_client: st.error("Billy non e' configurato."); return
     with st.spinner("Billy Walters sta analizzando..."):
         contesto, match_id = get_contesto_partita(h, a, camp_sel)
-        if not contesto.get("h_risultati") and not contesto.get("a_risultati"): st.warning("⚠️ API limit: analisi basata solo su storici e xG.")
+                # Controllo intelligente dei dati contestuali
+        h_ris = contesto.get("h_risultati", [])
+        a_ris = contesto.get("a_risultati", [])
+        limite_api_raggiunto = "LIMITE_API" in h_ris or "LIMITE_API" in a_ris
+        senza_dati = (not h_ris or h_ris == ["LIMITE_API"]) and (not a_ris or a_ris == ["LIMITE_API"])
+        
+        if limite_api_raggiunto:
+            st.warning("⏳ **Limite API raggiunto!** Hai fatto troppe richieste. Attendi 60 secondi e ripremi 🔍. L'analisi userà solo xG e Poisson.")
+        elif senza_dati:
+            st.info("ℹ️ **Dati recenti non disponibili** (la squadra gioca in leghe minori o non ha partite recenti). L'analisi userà xG e Poisson.")
         classifica_sess = st.session_state.get("classifica", {}); h_cl_key = clean_name(h); a_cl_key = clean_name(a)
         h_stand_s = classifica_sess.get(h_cl_key, {}); a_stand_s = classifica_sess.get(a_cl_key, {})
         giornata_corrente = st.session_state.get("live_data", [{}])[0].get("matchday") if st.session_state.get("live_data") else None
