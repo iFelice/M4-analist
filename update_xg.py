@@ -1,144 +1,135 @@
 """
-update_xg.py
-Scarica gli xG per squadra da FBref e li salva in database/xg_<campionato>.json
+update_xg.py - Scarica gli xG da Understat automaticamente
+Sostituisce il vecchio scraper FBref. Understat è molto più stabile e gratuito.
 Gira in GitHub Actions settimanalmente.
 """
 
 import requests
-import pandas as pd
 import json
+import re
+import base64
+import codecs
 import os
 import time
-from io import StringIO
 
-HEADERS = {
-    "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
-    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
-    "Accept-Language": "en-US,en;q=0.5",
-    "Accept-Encoding": "gzip, deflate, br",
-    "Connection": "keep-alive",
-    "Upgrade-Insecure-Requests": "1",
-    "Sec-Fetch-Dest": "document",
-    "Sec-Fetch-Mode": "navigate",
-    "Sec-Fetch-Site": "none",
-    "Cache-Control": "max-age=0",
+# Configurazione campionati su Understat
+# ID Lega: Serie A=11, Premier=9, La Liga=12, Bundesliga=20
+# Season: Anno di inizio della stagione (es. 2024 per il 2024/2025)
+LEAGUES = {
+    "serie_a": {"id": 11, "season": 2024},
+    "premier_league": {"id": 9, "season": 2024},
+    "la_liga": {"id": 12, "season": 2024},
+    "bundesliga": {"id": 20, "season": 2024},
 }
 
-FBREF_URLS = {
-    "serie_a":        "https://fbref.com/en/comps/11/2025-2026/stats/2025-2026-Serie-A-Stats",
-    "premier_league": "https://fbref.com/en/comps/9/2025-2026/stats/2025-2026-Premier-League-Stats",
-    "la_liga":        "https://fbref.com/en/comps/12/2025-2026/stats/2025-2026-La-Liga-Stats",
-    "bundesliga":     "https://fbref.com/en/comps/20/2025-2026/stats/2025-2026-Bundesliga-Stats",
-}
-
+# Mappatura nomi Understat -> Nomi usati dalla tua App
 NAME_MAP = {
-    "Inter Milan": "Inter", "Milan": "Milan", "Juventus": "Juventus",
-    "Napoli": "Napoli", "Atalanta": "Atalanta", "Roma": "Roma",
-    "Lazio": "Lazio", "Fiorentina": "Fiorentina", "Bologna": "Bologna",
-    "Torino": "Torino", "Monza": "Monza", "Genoa": "Genoa",
-    "Lecce": "Lecce", "Hellas Verona": "Verona", "Udinese": "Udinese",
-    "Cagliari": "Cagliari", "Empoli": "Empoli", "Parma": "Parma",
-    "Como": "Como", "Venezia": "Venezia", "Cremonese": "Cremonese",
-    "Manchester City": "Man City", "Manchester Utd": "Man United",
-    "Arsenal": "Arsenal", "Liverpool": "Liverpool", "Chelsea": "Chelsea",
-    "Tottenham": "Tottenham", "Newcastle Utd": "Newcastle",
-    "Aston Villa": "Aston Villa", "West Ham": "West Ham", "Brighton": "Brighton",
-    "Real Madrid": "Real Madrid", "Barcelona": "Barcelona",
-    "Atlético Madrid": "Atletico Madrid", "Athletic Club": "Athletic Club",
-    "Villarreal": "Villarreal", "Bayern Munich": "Bayern",
-    "Bayer Leverkusen": "Leverkusen", "Borussia Dortmund": "Dortmund",
-    "RB Leipzig": "Leipzig", "Eintracht Frankfurt": "Frankfurt",
+    # Serie A
+    "Inter Milan": "Inter", "AC Milan": "Milan", "AS Roma": "Roma", "Juventus": "Juventus",
+    "SS Lazio": "Lazio", "Atalanta": "Atalanta", "SSC Napoli": "Napoli", "ACF Fiorentina": "Fiorentina",
+    "Bologna": "Bologna", "Torino": "Torino", "Udinese": "Udinese", "Genoa": "Genoa",
+    "Cagliari": "Cagliari", "Empoli": "Empoli", "Hellas Verona": "Verona", "Lecce": "Lecce",
+    "Parma Calcio 1913": "Parma", "Monza": "Monza", "Como": "Como", "Venezia": "Venezia",
+    # Premier League
+    "Manchester City": "Man City", "Manchester United": "Man United", "Tottenham Hotspur": "Tottenham",
+    "Newcastle United": "Newcastle", "Aston Villa": "Aston Villa", "West Ham United": "West Ham",
+    "Brighton and Hove Albion": "Brighton", "Wolverhampton Wanderers": "Wolves",
+    "Crystal Palace": "Crystal Palace", "Nottingham Forest": "Nott'm Forest",
+    "AFC Bournemouth": "Bournemouth", "Fulham": "Fulham", "Brentford": "Brentford",
+    "Everton": "Everton", "Ipswich Town": "Ipswich", "Leicester City": "Leicester",
+    "Southampton": "Southampton",
+    # La Liga
+    "Atletico Madrid": "Atletico Madrid", "Athletic Bilbao": "Athletic Club",
+    "Real Sociedad": "Real Sociedad", "Celta Vigo": "Celta Vigo", "Rayo Vallecano": "Rayo Vallecano",
+    "Deportivo Alaves": "Alaves", "Girona": "Girona", "Las Palmas": "Las Palmas",
+    "Sevilla": "Sevilla", "Real Betis": "Betis", "Mallorca": "Mallorca", "Osasuna": "Osasuna",
+    "Getafe": "Getafe", "Espanyol": "Espanyol", "Valladolid": "Valladolid", "Leganes": "Leganes",
+    # Bundesliga
+    "Bayern Munich": "Bayern", "Bayer 04 Leverkusen": "Leverkusen", "Borussia Dortmund": "Dortmund",
+    "RB Leipzig": "Leipzig", "VfB Stuttgart": "Stuttgart", "Eintracht Frankfurt": "Frankfurt",
+    "SC Freiburg": "Freiburg", "TSG Hoffenheim": "Hoffenheim", "VfL Wolfsburg": "Wolfsburg",
+    "Union Berlin": "Union Berlin", "Borussia Mönchengladbach": "Monchengladbach",
+    "1. FSV Mainz 05": "Mainz", "SV Werder Bremen": "Werder Bremen", "FC Augsburg": "Augsburg",
+    "1. FC Heidenheim 1846": "Heidenheim", "VfL Bochum": "Bochum", "FC St. Pauli": "St. Pauli",
+    "Holstein Kiel": "Holstein Kiel"
 }
 
-def fetch_xg(league_key, url):
-    print(f"Fetching xG per {league_key}...")
+def fetch_xg_understat(league_key, league_id, season):
+    url = f"https://understat.com/league/{league_id}/{season}"
+    print(f"Fetching {url}...")
     try:
-        session = requests.Session()
-        # Prima visita homepage per cookie
-        session.get("https://fbref.com/", headers=HEADERS, timeout=15)
-        time.sleep(4)
-
-        r = session.get(url, headers=HEADERS, timeout=20)
-        print(f"  HTTP {r.status_code}, bytes: {len(r.content)}")
-
-        if r.status_code == 429:
-            print("  Rate limited da FBref")
+        # Headers standard per non farci bloccare dal server
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+        }
+        resp = requests.get(url, headers=headers, timeout=20)
+        
+        if resp.status_code == 404:
+            print(f"  Stagione {season} non ancora disponibile su Understat per questa lega.")
             return None
-        if r.status_code != 200:
+        if resp.status_code != 200:
+            print(f"  Errore HTTP: {resp.status_code}")
             return None
 
-        tables = pd.read_html(StringIO(r.text), header=[0, 1])
-        print(f"  Trovate {len(tables)} tabelle")
+        # Understat nasconde i dati in una variabile JS codificata in Base64 + Escape
+        match = re.search(r'var teamsData = JSON.parse\(\'(.*?)\'\);', resp.text)
+        if not match:
+            print("  Struttura pagina Understat cambiata o dati non trovati.")
+            return None
 
-        for i, table in enumerate(tables):
-            flat_cols = []
-            for a, b in table.columns:
-                a, b = str(a).strip(), str(b).strip()
-                flat_cols.append(b if "Unnamed" in a else f"{a}_{b}")
-            table.columns = flat_cols
-
-            squad_col = next((c for c in flat_cols if c == "Squad"), None)
-            xg_col    = next((c for c in flat_cols if c == "Expected_xG"), None)
-            xga_col   = next((c for c in flat_cols if "xGA" in c and "Expected" in c), None)
-            mp_col    = next((c for c in flat_cols if c in ("Playing Time_MP", "MP")), None)
-
-            if not (squad_col and xg_col and xga_col):
+        encoded_data = match.group(1)
+        
+        # 1. Decodifica Base64
+        decoded_bytes = base64.b64decode(encoded_data)
+        # 2. Unescape dei caratteri (es. \\x27 -> ')
+        decoded_str = codecs.escape_decode(decoded_bytes)[0].decode('utf-8')
+        
+        teams_data = json.loads(decoded_str)
+        
+        result = {}
+        for team_id, team_info in teams_data.items():
+            understat_name = team_info.get("title", "")
+            clean_name = NAME_MAP.get(understat_name, understat_name)
+            
+            history = team_info.get("history", [])
+            if not history:
                 continue
-
-            df = table[[squad_col, xg_col, xga_col]].copy()
-            df = df[df[squad_col].notna()]
-            df = df[~df[squad_col].astype(str).str.contains("Squad|vs", na=True)]
-            df[xg_col]  = pd.to_numeric(df[xg_col],  errors="coerce")
-            df[xga_col] = pd.to_numeric(df[xga_col], errors="coerce")
-            df = df.dropna(subset=[xg_col, xga_col])
-
-            if len(df) < 10:
-                continue
-
-            mp_series = pd.to_numeric(table.get(mp_col, pd.Series(dtype=float)), errors="coerce") if mp_col else None
-
-            result = {}
-            for idx, row in df.iterrows():
-                nome = NAME_MAP.get(str(row[squad_col]).strip(), str(row[squad_col]).strip())
-                mp = float(mp_series.iloc[idx]) if mp_series is not None and idx < len(mp_series) and pd.notna(mp_series.iloc[idx]) else 20
-                mp = max(mp, 1)
-                result[nome] = {
-                    "xG_avg":  round(float(row[xg_col])  / mp, 3),
-                    "xGA_avg": round(float(row[xga_col]) / mp, 3),
-                }
-
-            if len(result) >= 10:
-                print(f"  OK: {len(result)} squadre")
-                return result
-
-        print("  Nessuna tabella xG trovata")
-        return None
-
+            
+            # Somma gli xG e xGA di tutte le partite giocate fino ad ora nella stagione
+            total_xg = sum(float(m.get("xG", 0)) for m in history)
+            total_xga = sum(float(m.get("xGA", 0)) for m in history)
+            matches_played = len(history)
+            
+            result[clean_name] = {
+                "xG_avg": round(total_xg / matches_played, 3) if matches_played > 0 else 0,
+                "xGA_avg": round(total_xga / matches_played, 3) if matches_played > 0 else 0
+            }
+            
+        return result
+        
     except Exception as e:
-        print(f"  Errore: {e}")
+        print(f"  Errore scraping Understat: {e}")
         return None
-
 
 def main():
     os.makedirs("database", exist_ok=True)
     successi = 0
 
-    for league_key, url in FBREF_URLS.items():
-        data = fetch_xg(league_key, url)
-        if data:
+    for league_key, info in LEAGUES.items():
+        data = fetch_xg_understat(league_key, info["id"], info["season"])
+        if data and len(data) >= 10:
             path = f"database/xg_{league_key}.json"
             with open(path, "w", encoding="utf-8") as f:
                 json.dump(data, f, ensure_ascii=False, indent=2)
-            print(f"  Salvato: {path}")
+            print(f"  Salvato: {path} ({len(data)} squadre)")
             successi += 1
         else:
-            print(f"  SKIP {league_key}")
-        time.sleep(6)  # Rispetta rate limit FBref
+            print(f"  SKIP {league_key} - Dati insufficienti o non disponibili")
+        
+        # Pausa di 3 secondi tra una lega e l'altra per non sovraccaricare Understat
+        time.sleep(3)
 
-    print(f"\nCompletato: {successi}/{len(FBREF_URLS)} campionati")
-    if successi == 0:
-        print("ATTENZIONE: nessun xG scaricato - FBref potrebbe bloccare il runner")
-
+    print(f"\nCompletato: {successi}/{len(LEAGUES)} campionati aggiornati")
 
 if __name__ == "__main__":
     main()
