@@ -16,10 +16,10 @@ import time
 # ID Lega: Serie A=11, Premier=9, La Liga=12, Bundesliga=20
 # Season: Anno di inizio della stagione (es. 2024 per il 2024/2025)
 LEAGUES = {
-    "serie_a": {"id": 11, "season": 2024},
-    "premier_league": {"id": 9, "season": 2024},
-    "la_liga": {"id": 12, "season": 2024},
-    "bundesliga": {"id": 20, "season": 2024},
+    "serie_a": {"id": 11, "season": 2025},
+    "premier_league": {"id": 9, "season": 2025},
+    "la_liga": {"id": 12, "season": 2025},
+    "bundesliga": {"id": 20, "season": 2025},
 }
 
 # Mappatura nomi Understat -> Nomi usati dalla tua App
