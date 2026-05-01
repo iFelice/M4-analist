@@ -1,7 +1,6 @@
 """
 update_xg.py - Scarica gli xG da Understat automaticamente
-Sostituisce il vecchio scraper FBref. Understat è molto più stabile e gratuito.
-Gira in GitHub Actions settimanalmente.
+Stagione corrente: 2025/2026 (ID Understat = 2025)
 """
 
 import requests
@@ -14,7 +13,7 @@ import time
 
 # Configurazione campionati su Understat
 # ID Lega: Serie A=11, Premier=9, La Liga=12, Bundesliga=20
-# Season: Anno di inizio della stagione (es. 2024 per il 2024/2025)
+# Season: Anno di inizio della stagione (2025 per il 2025/2026)
 LEAGUES = {
     "serie_a": {"id": 11, "season": 2025},
     "premier_league": {"id": 9, "season": 2025},
@@ -30,6 +29,7 @@ NAME_MAP = {
     "Bologna": "Bologna", "Torino": "Torino", "Udinese": "Udinese", "Genoa": "Genoa",
     "Cagliari": "Cagliari", "Empoli": "Empoli", "Hellas Verona": "Verona", "Lecce": "Lecce",
     "Parma Calcio 1913": "Parma", "Monza": "Monza", "Como": "Como", "Venezia": "Venezia",
+    "Cremonese": "Cremonese", "Sassuolo": "Sassuolo", "Pisa": "Pisa",
     # Premier League
     "Manchester City": "Man City", "Manchester United": "Man United", "Tottenham Hotspur": "Tottenham",
     "Newcastle United": "Newcastle", "Aston Villa": "Aston Villa", "West Ham United": "West Ham",
@@ -58,7 +58,6 @@ def fetch_xg_understat(league_key, league_id, season):
     url = f"https://understat.com/league/{league_id}/{season}"
     print(f"Fetching {url}...")
     try:
-        # Headers standard per non farci bloccare dal server
         headers = {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
         }
@@ -71,17 +70,13 @@ def fetch_xg_understat(league_key, league_id, season):
             print(f"  Errore HTTP: {resp.status_code}")
             return None
 
-        # Understat nasconde i dati in una variabile JS codificata in Base64 + Escape
         match = re.search(r'var teamsData = JSON.parse\(\'(.*?)\'\);', resp.text)
         if not match:
             print("  Struttura pagina Understat cambiata o dati non trovati.")
             return None
 
         encoded_data = match.group(1)
-        
-        # 1. Decodifica Base64
         decoded_bytes = base64.b64decode(encoded_data)
-        # 2. Unescape dei caratteri (es. \\x27 -> ')
         decoded_str = codecs.escape_decode(decoded_bytes)[0].decode('utf-8')
         
         teams_data = json.loads(decoded_str)
@@ -95,7 +90,6 @@ def fetch_xg_understat(league_key, league_id, season):
             if not history:
                 continue
             
-            # Somma gli xG e xGA di tutte le partite giocate fino ad ora nella stagione
             total_xg = sum(float(m.get("xG", 0)) for m in history)
             total_xga = sum(float(m.get("xGA", 0)) for m in history)
             matches_played = len(history)
@@ -126,7 +120,6 @@ def main():
         else:
             print(f"  SKIP {league_key} - Dati insufficienti o non disponibili")
         
-        # Pausa di 3 secondi tra una lega e l'altra per non sovraccaricare Understat
         time.sleep(3)
 
     print(f"\nCompletato: {successi}/{len(LEAGUES)} campionati aggiornati")
