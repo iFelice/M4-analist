@@ -37,11 +37,12 @@ st.markdown(f"""
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&display=swap');
     html, body, [data-testid="stapp"] {{ background-color: {bg} !important; color: {txt} !important; font-family: 'Inter', sans-serif; }}
     .stApp {{ background-color: {bg}; }}
-    .maradona-header {{
-        background: linear-gradient(rgba(0, 45, 91, 0.8), rgba(0, 45, 91, 0.8)), 
-                    url('https://github.com/iFelice/M4-analist/blob/main/images/gpt-image-1.5-high-fidelity_b_crea_un_banner_cari%20(1).jpg?raw=true');
-        background-size: cover; background-position: center; padding: 40px;
-        border-radius: 0 0 20px 20px; text-align: center; margin: -60px -60px 30px -60px; color: white;
+        .maradona-header {{
+        background: linear-gradient(135deg, rgba(0, 30, 60, 0.4), rgba(0, 80, 150, 0.4)), 
+                    url('https://github.com/iFelice/M4-analist/blob/main/images/gpt-image-1.5-high-fidelity_cari%20(1).png?raw=true');
+        background-size: cover; background-position: center; padding: 50px;
+        border-radius: 0 0 24px 24px; text-align: center; margin: -60px -60px 40px -60px; color: white;
+        box-shadow: 0 10px 30px rgba(0,0,0,0.3);
     }}
     .match-card {{ background-color: {card}; border-radius: 12px; padding: 25px; margin-bottom: 8px; border: 1px solid {border}; box-shadow: 0 2px 8px rgba(0,0,0,0.05); }}
     .team-name {{ font-size: 19px; font-weight: 800; color: #58a6ff; text-transform: uppercase; }}
