@@ -25,59 +25,37 @@ except Exception as e:
 st.set_page_config(page_title="M4 STRATEGIC TERMINAL", layout="wide", initial_sidebar_state="expanded")
 
 # --- GESTIONE TEMA ---
-theme = st.sidebar.select_slider("⚙️ TEMA", options=["LIGHT", "DARK"], value="DARK")
+theme = st.sidebar.select_slider("⚙️ TEMA", options=["LIGHT", "DARK"], value="LIGHT")
 if theme == "DARK":
-    bg, card, txt, border, stat_bg, lbl, app_bg = "#0b0e11", "#161b22", "#ffffff", "#30363d", "#0d1117", "#58a6ff", "#0d1117"
+    bg, card, txt, border, stat_bg, lbl = "#0b0e11", "#161b22", "#ffffff", "#30363d", "#0d1117", "#58a6ff"
 else:
-    bg, card, txt, border, stat_bg, lbl, app_bg = "#f0f2f5", "#ffffff", "#1a1d23", "#e0e4e9", "#f8f9fa", "#0056b3", "#ffffff"
+    bg, card, txt, border, stat_bg, lbl = "#f0f2f5", "#ffffff", "#1a1d23", "#e0e4e9", "#f8f9fa", "#0056b3"
 
-# --- CSS RESTYLED ---
+# --- CSS ---
 st.markdown(f"""
     <style>
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800;900&display=swap');
-    html, body, [data-testid="stapp"] {{ background-color: {app_bg} !important; color: {txt} !important; font-family: 'Inter', sans-serif; }}
-    .stApp {{ background-color: {app_bg}; }}
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&display=swap');
+    html, body, [data-testid="stapp"] {{ background-color: {bg} !important; color: {txt} !important; font-family: 'Inter', sans-serif; }}
+    .stApp {{ background-color: {bg}; }}
     .maradona-header {{
-        background: linear-gradient(135deg, rgba(0, 40, 80, 0.95), rgba(0, 80, 150, 0.9)), 
-                    url('https://images.unsplash.com/photo-1574629810360-7efbbe195018?auto=format&fit=crop&w=1600&q=80');
-        background-size: cover; background-position: center; padding: 50px;
-        border-radius: 0 0 24px 24px; text-align: center; margin: -60px -60px 40px -60px; color: white;
-        box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+        background: linear-gradient(rgba(0, 45, 91, 0.8), rgba(0, 45, 91, 0.8)), 
+                    url('https://github.com/iFelice/M4-analist/blob/main/images/gpt-image-1.5-high-fidelity_b_crea_un_banner_cari%20(1).jpg?raw=true');
+        background-size: cover; background-position: center; padding: 40px;
+        border-radius: 0 0 20px 20px; text-align: center; margin: -60px -60px 30px -60px; color: white;
     }}
-    .match-card {{ 
-        background-color: {card}; border-radius: 16px; padding: 20px; margin-bottom: 12px; 
-        border: 1px solid {border}; box-shadow: 0 4px 12px rgba(0,0,0,0.08); transition: all 0.2s;
-    }}
-    .match-card:hover {{ border-color: #58a6ff; box-shadow: 0 6px 20px rgba(88, 166, 255, 0.15); }}
-    .team-name {{ font-size: 20px; font-weight: 900; color: #58a6ff; text-transform: uppercase; letter-spacing: -0.5px; }}
-    .label-header {{ color: {lbl}; font-size: 11px !important; font-weight: 800; text-transform: uppercase; display: block; margin-bottom: 8px; letter-spacing: 1px; }}
-    .match-date {{ font-size: 13px !important; color: #8b949e !important; font-weight: 600; display: block; margin-top: 4px; }}
-    .match-result {{ font-size: 20px; font-weight: 900; color: #3fb950; margin-top: 6px; display: block; letter-spacing: 1px; }}
-    .stat-container {{ background-color: {stat_bg}; border: 1px solid {border}; border-radius: 10px; padding: 12px; text-align: center; height: 100%; }}
-    .val-p-green {{ color: #3fb950; font-size: 18px; font-weight: 900; }}
-    .val-p-red {{ color: #f85149; font-size: 18px; font-weight: 900; }}
-    .val-q {{ color: #8b949e; font-size: 12px; font-weight: 600; display: block; margin-top: 3px; font-family: monospace; }}
-    .top-mix-row {{ background-color: {card}; border: 1px solid {border}; border-radius: 12px; padding: 16px 20px; margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center; }}
-    .pred-box {{ background-color: {card}; border-radius: 12px; padding: 16px; margin-bottom: 12px; border-left: 5px solid {border}; box-shadow: 0 2px 8px rgba(0,0,0,0.05); }}
-    .pred-box-ok {{ border-left-color: #3fb950 !important; }}
-    .pred-box-ko {{ border-left-color: #f85149 !important; }}
-    .pred-box-wait {{ border-left-color: #8b949e !important; }}
-    .pred-type {{ font-size: 10px; font-weight: 800; text-transform: uppercase; padding: 3px 8px; border-radius: 6px; margin-left: 8px; letter-spacing: 0.5px; }}
-    .type-mix {{ background-color: #d29922; color: #0d1117; }}
-    .type-single {{ background-color: #58a6ff; color: #0d1117; }}
-    
-    /* AI Dialog Styles */
-    .ai-section {{ margin-bottom: 20px; }}
-    .ai-section-title {{ font-size: 12px; font-weight: 800; text-transform: uppercase; color: #8b949e; margin-bottom: 8px; letter-spacing: 1px; border-bottom: 1px solid {border}; padding-bottom: 4px; }}
-    .ai-pronostico {{ background: linear-gradient(135deg, #1a1e23, #0d1117); border: 1px solid #30363d; border-radius: 12px; padding: 20px; text-align: center; margin: 15px 0; }}
-    .ai-pronostico-market {{ font-size: 24px; font-weight: 900; color: #3fb950; text-transform: uppercase; }}
-    .ai-pronostico-prob {{ font-size: 40px; font-weight: 900; color: #ffffff; margin: 5px 0; }}
-    .ai-confidence {{ font-size: 32px; font-weight: 900; color: #58a6ff; }}
-    .ai-text {{ font-size: 14px; line-height: 1.6; color: {txt}; }}
-    
-    /* Streamlit overrides */
-    [data-testid="stVerticalBlock"] > div {{ gap: 0rem !important; }}
-    .stButton > button {{ border-radius: 8px; font-weight: 600; }}
+    .match-card {{ background-color: {card}; border-radius: 12px; padding: 25px; margin-bottom: 8px; border: 1px solid {border}; box-shadow: 0 2px 8px rgba(0,0,0,0.05); }}
+    .team-name {{ font-size: 19px; font-weight: 800; color: #58a6ff; text-transform: uppercase; }}
+    .label-header {{ color: {lbl}; font-size: 15px !important; font-weight: 900; text-transform: uppercase; display: block; margin-bottom: 5px; border-bottom: 1px solid {border}; }}
+    .match-date {{ font-size: 15px !important; color: #3b82f6 !important; font-weight: 700; display: block; margin-top: 5px; }}
+    .stat-container {{ background-color: {stat_bg}; border: 1px solid {border}; border-radius: 8px; padding: 10px; text-align: center; height: 100%; }}
+    .val-p-green {{ color: #28a745; font-size: 17px; font-weight: 800; }}
+    .val-p-red {{ color: #dc3545; font-size: 17px; font-weight: 800; }}
+    .top-mix-row {{ background-color: {card}; border: 1px solid {border}; border-radius: 8px; padding: 15px; margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center; }}
+    .match-result {{ font-size: 18px; font-weight: 800; color: #28a745; margin-top: 5px; display: block; }}
+    .pred-box {{ background-color: {stat_bg}; border: 1px solid {border}; border-radius: 8px; padding: 15px; margin-bottom: 10px; }}
+    .pred-type {{ font-size: 11px; font-weight: 700; text-transform: uppercase; padding: 2px 6px; border-radius: 4px; margin-left: 5px; }}
+    .type-mix {{ background-color: #ffc107; color: #000; }}
+    .type-single {{ background-color: #17a2b8; color: #fff; }}
     </style>
     """, unsafe_allow_html=True)
 
@@ -266,7 +244,7 @@ def calcola_segnali(risultati, infraset_giocate, infraset_programmate, stand, gi
         elif ratio_gs > 1.5: mult_def += 0.04
     return max(0.78, min(1.22, mult_att)), max(0.78, min(1.22, mult_def)), ""
 
-# --- DATI CONTESTUALI (OTTIMIZZATO) ---
+# --- DATI CONTESTUALI ---
 def get_team_fd_id(team_name, camp_sel):
     for match in st.session_state.get("live_data", []):
         for team in [match["homeTeam"], match["awayTeam"]]:
@@ -275,37 +253,62 @@ def get_team_fd_id(team_name, camp_sel):
     return None
 
 @st.cache_data(ttl=3600)
-def get_team_context_fd(team_id, match_date_str, camp_code):
-    match_date = datetime.fromisoformat(match_date_str)
-    window_start = match_date - timedelta(days=7)
-    form = []; infra_giocate = []; infra_programmate = []
+def get_ultimi_risultati_fd(team_id, camp_sel, n=5):
     try:
-        r = requests.get(f"https://api.football-data.org/v4/teams/{team_id}/matches", headers={"X-Auth-Token": API_KEY_DATA}, params={"status": "FINISHED,TIMED,SCHEDULED", "limit": 15})
-        if r.status_code == 429: return ["LIMITE_API"], [], []
-        for match in r.json().get("matches", []):
-            status = match.get("status", ""); comp_code = match.get("competition", {}).get("code", ""); comp_name = match.get("competition", {}).get("name", "")
+        r = requests.get(
+            f"https://api.football-data.org/v4/teams/{team_id}/matches",
+            headers={"X-Auth-Token": API_KEY_DATA},
+            # Rimosso il filtro competizioni: così trova partite anche se la squadra gioca in Serie B o Coppe
+            params={"status": "FINISHED", "limit": 10} 
+        )
+        
+        # Controllo limite richieste API (10/minuto)
+        if r.status_code == 429:
+            st.warning("⏳ Limite API raggiunto (10 richieste/minuto). Attendi 60 secondi e riprova.")
+            return ["LIMITE_API"]
+            
+        risultati = []
+        for match in r.json().get("matches", [])[-n:]:
+            gh = match["score"]["fullTime"]["home"]; ga = match["score"]["fullTime"]["away"]; winner = match["score"]["winner"]
+            is_home = match["homeTeam"]["id"] == team_id
+            if (is_home and winner == "HOME_TEAM") or (not is_home and winner == "AWAY_TEAM"): esito = "V"
+            elif winner == "DRAW": esito = "X"
+            else: esito = "P"
+            risultati.append(f"{match['homeTeam'].get('shortName','?')} {gh}-{ga} {match['awayTeam'].get('shortName','?')} ({esito})")
+        return risultati
+    except: return []
+        
+@st.cache_data(ttl=3600)
+def get_infraset_data(team_id, camp_code, match_date_str, now_utc_str):
+    match_date = datetime.fromisoformat(match_date_str); now_utc = datetime.fromisoformat(now_utc_str)
+    window_start = match_date - timedelta(days=7); giocate = []; programmate = []
+    try:
+        r_fin = requests.get(f"https://api.football-data.org/v4/teams/{team_id}/matches", headers={"X-Auth-Token": API_KEY_DATA}, params={"status": "FINISHED", "limit": 10})
+        for match in r_fin.json().get("matches", []):
+            if match.get("competition", {}).get("code", "") == camp_code: continue
             try: match_dt = datetime.fromisoformat(match["utcDate"].replace("Z", "+00:00"))
             except: continue
-            if status == "FINISHED" and comp_code == camp_code:
-                gh = match["score"]["fullTime"]["home"]; ga = match["score"]["fullTime"]["away"]; winner = match["score"]["winner"]
-                is_home = match["homeTeam"]["id"] == team_id
-                if (is_home and winner == "HOME_TEAM") or (not is_home and winner == "AWAY_TEAM"): esito = "V"
-                elif winner == "DRAW": esito = "X"
-                else: esito = "P"
-                form.append(f"{match['homeTeam'].get('shortName','?')} {gh}-{ga} {match['awayTeam'].get('shortName','?')} ({esito})")
-            elif status == "FINISHED" and comp_code != camp_code:
-                if match_dt >= window_start and match_dt < match_date:
-                    gh = match["score"]["fullTime"].get("home"); ga = match["score"]["fullTime"].get("away")
-                    if gh is not None: infra_giocate.append(f"{match_dt.strftime('%d/%m')} {comp_name}: {gh}-{ga}")
-            elif status in ["TIMED", "SCHEDULED"] and comp_code != camp_code:
-                if match_dt > datetime.now(timezone.utc) and match_dt < match_date:
-                    infra_programmate.append(f"[PROG {match_dt.strftime('%d/%m')}] {comp_name}")
+            if match_dt < window_start or match_dt >= match_date: continue
+            gh = match["score"]["fullTime"].get("home"); ga = match["score"]["fullTime"].get("away")
+            if gh is not None and ga is not None: giocate.append(f"{match_dt.strftime('%d/%m')} {match.get('competition',{}).get('name','')}: {gh}-{ga}")
+        r_prg = requests.get(f"https://api.football-data.org/v4/teams/{team_id}/matches", headers={"X-Auth-Token": API_KEY_DATA}, params={"status": "SCHEDULED,TIMED", "limit": 5})
+        for match in r_prg.json().get("matches", []):
+            if match.get("competition", {}).get("code", "") == camp_code: continue
+            try: match_dt = datetime.fromisoformat(match["utcDate"].replace("Z", "+00:00"))
+            except: continue
+            if match_dt >= match_date or match_dt <= now_utc: continue
+            programmate.append(f"[PROG {match_dt.strftime('%d/%m')}] {match.get('competition',{}).get('name','')}")
     except: pass
-    return form[-5:], infra_giocate, infra_programmate
+    return giocate, programmate
 
 def get_contesto_partita(h, a, camp_sel):
     h_id, a_id = get_team_fd_id(h, camp_sel), get_team_fd_id(a, camp_sel)
-    contesto = {"h_risultati": [], "a_risultati": [], "h_infortunati": [], "a_infortunati": [], "h_infraset": [], "a_infraset": [], "h_infraset_prog": [], "a_infraset_prog": []}
+    contesto = {"h_risultati": get_ultimi_risultati_fd(h_id, camp_sel) if h_id else [], "a_risultati": get_ultimi_risultati_fd(a_id, camp_sel) if a_id else [], "h_infortunati": [], "a_infortunati": [], "h_infraset": [], "a_infraset": [], "h_infraset_prog": [], "a_infraset_prog": []}
+    try:
+        with DDGS() as ddgs:
+            for r in ddgs.text(f"{h} infortunati squalificati {camp_sel} 2026", max_results=2): contesto["h_infortunati"].append(r["body"][:300])
+            for r in ddgs.text(f"{a} infortunati squalificati {camp_sel} 2026", max_results=2): contesto["a_infortunati"].append(r["body"][:300])
+    except: pass
     camp_code = {"Serie A": "SA", "Premier League": "PL", "La Liga": "PD", "Bundesliga": "BL1"}.get(camp_sel, "SA")
     match_date = now_utc = datetime.now(timezone.utc); match_id_found = None
     for mx in st.session_state.get("live_data", []):
@@ -313,13 +316,8 @@ def get_contesto_partita(h, a, camp_sel):
             try: match_date = datetime.fromisoformat(mx["utcDate"].replace("Z", "+00:00")); match_id_found = mx["id"]
             except: pass
             break
-    if h_id: contesto["h_risultati"], contesto["h_infraset"], contesto["h_infraset_prog"] = get_team_context_fd(h_id, match_date.isoformat(), camp_code)
-    if a_id: contesto["a_risultati"], contesto["a_infraset"], contesto["a_infraset_prog"] = get_team_context_fd(a_id, match_date.isoformat(), camp_code)
-    try:
-        with DDGS() as ddgs:
-            for r in ddgs.text(f"{h} infortunati squalificati {camp_sel} 2026", max_results=2): contesto["h_infortunati"].append(r["body"][:300])
-            for r in ddgs.text(f"{a} infortunati squalificati {camp_sel} 2026", max_results=2): contesto["a_infortunati"].append(r["body"][:300])
-    except: pass
+    if h_id: contesto["h_infraset"], contesto["h_infraset_prog"] = get_infraset_data(h_id, camp_code, match_date.isoformat(), now_utc.isoformat())
+    if a_id: contesto["a_infraset"], contesto["a_infraset_prog"] = get_infraset_data(a_id, camp_code, match_date.isoformat(), now_utc.isoformat())
     return contesto, match_id_found
 
 # --- TOP MIX LOGIC ---
@@ -373,18 +371,22 @@ def analisi_rapida_giornata(matches, team_stats, avg_h, avg_a, camp_sel, classif
         except: pass
     return salvate
 
-# --- POPUP AI CON UI AVANZATA ---
+# --- POPUP AI ---
 @st.dialog("STRATEGIC ANALYSIS", width="large")
 def show_details(h, a, m, camp_sel="Serie A"):
     if not groq_client: st.error("Billy non e' configurato."); return
     with st.spinner("Billy Walters sta analizzando..."):
         contesto, match_id = get_contesto_partita(h, a, camp_sel)
-        h_ris = contesto.get("h_risultati", []); a_ris = contesto.get("a_risultati", [])
-        limite_api = "LIMITE_API" in h_ris or "LIMITE_API" in a_ris
+                # Controllo intelligente dei dati contestuali
+        h_ris = contesto.get("h_risultati", [])
+        a_ris = contesto.get("a_risultati", [])
+        limite_api_raggiunto = "LIMITE_API" in h_ris or "LIMITE_API" in a_ris
         senza_dati = (not h_ris or h_ris == ["LIMITE_API"]) and (not a_ris or a_ris == ["LIMITE_API"])
-        if limite_api: st.warning("⏳ **Limite API raggiunto!** Attendi 60s. Analisi basata solo su xG/Poisson.")
-        elif senza_dati: st.info("ℹ️ **Dati recenti non disponibili**. Analisi basata su xG/Poisson.")
-            
+        
+        if limite_api_raggiunto:
+            st.warning("⏳ **Limite API raggiunto!** Hai fatto troppe richieste. Attendi 60 secondi e ripremi 🔍. L'analisi userà solo xG e Poisson.")
+        elif senza_dati:
+            st.info("ℹ️ **Dati recenti non disponibili** (la squadra gioca in leghe minori o non ha partite recenti). L'analisi userà xG e Poisson.")
         classifica_sess = st.session_state.get("classifica", {}); h_cl_key = clean_name(h); a_cl_key = clean_name(a)
         h_stand_s = classifica_sess.get(h_cl_key, {}); a_stand_s = classifica_sess.get(a_cl_key, {})
         giornata_corrente = st.session_state.get("live_data", [{}])[0].get("matchday") if st.session_state.get("live_data") else None
@@ -410,91 +412,9 @@ PRONOSTICO SICURO: DEVI scrivere OBBLIGATORIAMENTE "{mercato_top} - prob {prob_t
 TOP 3 MERCATI ALTERNATIVI: I 3 mercati con prob più alta dopo "{mercato_top}". LIVELLO DI CONFIDENZA: 1-10."""
         try:
             res = groq_client.chat.completions.create(model="llama-3.3-70b-versatile", messages=[{"role": "user", "content": prompt}], max_tokens=800)
-            testo = res.choices[0].message.content
-            
-            # --- RENDERING GRAFICO AVANZATO DELL'AI ---
-            sezioni = testo.split("\n")
-            sezione_corrente = ""
-            html_out = ""
-            
-            for riga in righe:
-                rs = riga.strip()
-                if not rs: continue
-                
-                # Riconoscimento sezioni
-                if "PRONOSTICO SICURO" in rs.upper():
-                    sezione_corrente = "sicuro"
-                    html_out += "<div class='ai-section'>"
-                    html_out += "<div class='ai-section-title'>🎯 PRONOSTICO SICURO</div>"
-                    
-                    # Estrai mercato e probabilità
-                    mercato_ai = mercato_top
-                    prob_ai = f"{prob_top:.0%}"
-                    if rs.lower().startswith("pronostico sicuro"): rs = rs[len("pronostico sicuro"):].strip()
-                    if rs.startswith(":"): rs = rs[1:].strip()
-                    if "-" in rs:
-                        parti = rs.split("-")
-                        mercato_ai = parti[0].strip()
-                        prob_ai = parti[1].strip() if len(parti) > 1 else prob_ai
-                    
-                    # Scegli colore in base al mercato
-                    mkt_lower = mercato_ai.lower()
-                    color = "#3fb950" if "under" in mkt_lower or "ng" in mkt_lower else "#f85149" if "over" in mkt_lower or "gg" in mkt_lower else "#58a6ff"
-                    
-                    html_out += f"""
-                    <div class='ai-pronostico' style='border-color: {color};'>
-                        <div class='ai-pronostico-market' style='color: {color};'>{mercato_ai}</div>
-                        <div class='ai-pronostico-prob'>{prob_ai}</div>
-                    </div>"""
-                    
-                    # Motivazione (il testo dopo la probabilità)
-                    if len(parti) > 2:
-                        motivazione = "-".join(parti[2:]).strip()
-                        html_out += f"<div class='ai-text'>{motivazione}</div>"
-                    html_out += "</div>"
-                    continue
-                    
-                elif "TOP 3" in rs.upper() or "TOP3" in rs.upper():
-                    sezione_corrente = "top3"
-                    html_out += "<div class='ai-section'><div class='ai-section-title'>📊 TOP 3 ALTERNATIVE</div>"
-                    continue
-                elif "LIVELLO DI CONFIDENZA" in rs.upper():
-                    sezione_corrente = "confidenza"
-                    html_out += "<div class='ai-section'><div class='ai-section-title'>💪 LIVELLO DI CONFIDENZA</div>"
-                    continue
-                elif any(s in rs.upper() for s in ["STATO DI FORMA", "ANALISI TATTICA", "RAGIONAMENTO", "RISULTATI ATTESI"]):
-                    if sezione_corrente: html_out += "</div>"
-                    sezione_corrente = "testo"
-                    titolo = rs.upper().replace("*", "")
-                    html_out += f"<div class='ai-section'><div class='ai-section-title'>{titolo}</div>"
-                    continue
-                    
-                # Contenuto
-                if sezione_corrente == "top3" and rs[0].isdigit():
-                    html_out += f"<div style='background:{stat_bg}; padding:8px 12px; border-radius:8px; margin-bottom:4px; border-left: 3px solid #58a6ff;'>{rs}</div>"
-                elif sezione_corrente == "confidenza":
-                    voto_match = re.search(r'(\d+)(?:/\d+)?', rs)
-                    if voto_match:
-                        voto = int(voto_match.group(1))
-                        colore_conf = "#3fb950" if voto >= 7 else "#d29922" if voto >= 5 else "#f85149"
-                        html_out += f"<div style='text-align:center;'><span class='ai-confidence' style='color:{colore_conf};'>{voto}/10</span><br>{rs}</div>"
-                    else:
-                        html_out += f"<div class='ai-text'>{rs}</div>"
-                else:
-                    html_out += f"<div class='ai-text'>{rs}</div>"
-                    
-            if sezione_corrente: html_out += "</div>"
-
-            # Forza sfondo bianco per il popup in light mode
-            if theme == "LIGHT":
-                st.markdown("""<style>div[data-testid="stDialog"] > div > div { background-color: #ffffff !important; color: #1a1d23 !important; }</style>""", unsafe_allow_html=True)
-                
-            st.markdown(html_out, unsafe_allow_html=True)
-
-            # Salvataggio predizione
-            pronostico_sicuro = ""; top3 = []; prob_sicuro = 0.0
-            # (Logica di estrazione invariata)
-            in_sicuro = False; in_top3 = False
+            testo = res.choices[0].message.content.replace("**", "").replace("*", "")
+            st.markdown(f"<div style='color:#1a1a1a; font-size:15px; line-height:1.6;'>{testo}</div>", unsafe_allow_html=True)
+            pronostico_sicuro = ""; top3 = []; prob_sicuro = 0.0; in_sicuro = False; in_top3 = False
             for riga in testo.split("\n"):
                 rs = riga.strip()
                 if rs.startswith("PRONOSTICO SICURO"): in_sicuro = True; in_top3 = False; continue
@@ -504,7 +424,6 @@ TOP 3 MERCATI ALTERNATIVI: I 3 mercati con prob più alta dopo "{mercato_top}". 
                     pronostico_sicuro = rs[:150]; m_prob = re.search(r"(\d+)\%", rs)
                     if m_prob: prob_sicuro = int(m_prob.group(1))
                 if in_top3 and rs and rs[0].isdigit(): top3.append(rs[:120])
-                
             match_date_str = ""; m_id = match_id
             if not m_id:
                 for mx in st.session_state.get("live_data", []):
@@ -519,15 +438,17 @@ TOP 3 MERCATI ALTERNATIVI: I 3 mercati con prob più alta dopo "{mercato_top}". 
         except Exception as e: st.error(f"Errore AI: {e}")
 
 # --- UI PRINCIPALE ---
-st.markdown('<div class="maradona-header"><h1>M4 STRATEGIC TERMINAL</h1><p>Professional Betting Intelligence v39.0</p></div>', unsafe_allow_html=True)
+st.markdown('<div class="maradona-header"><h1>M4 STRATEGIC TERMINAL</h1><p>Intelligence Evolution v38.0</p></div>', unsafe_allow_html=True)
 
 with st.sidebar:
-    st.title("🎩 Billy Walters")
+    st.title("🎩 Billy Walters Chat")
     camp_sel = st.selectbox("CAMPIONATO", ["Serie A", "Premier League", "La Liga", "Bundesliga"])
     try:
         xg_check = get_understat_xg(camp_sel)
-        if xg_check and len(xg_check) > 0: st.markdown(f"<div style='font-size:12px; color:#3fb950; font-weight:700;'>✅ xG caricati ({len(xg_check)} squadre)</div>", unsafe_allow_html=True)
-        else: st.markdown("<div style='font-size:12px; color:#f85149; font-weight:700;'>⚠️ xG non disponibili</div>", unsafe_allow_html=True)
+        if xg_check and len(xg_check) > 0:
+            st.markdown(f"<div style='font-size:12px; color:#28a745; font-weight:700;'>✅ xG caricati ({len(xg_check)} squadre)</div>", unsafe_allow_html=True)
+        else:
+            st.markdown("<div style='font-size:12px; color:#dc3545; font-weight:700;'>⚠️ xG non disponibili (uso medie storiche)</div>", unsafe_allow_html=True)
     except: pass
     
     camp_cached = st.session_state.get("live_camp", None)
@@ -553,16 +474,21 @@ with st.sidebar:
             except: pass
         except Exception as e: st.sidebar.error(f"Errore sync: {e}")
         
+    # FIX: SELEZIONE GIORNATA INTELLIGENTE (PIU' VICINA A OGGI)
     if "live_data" in st.session_state and st.session_state.live_data:
         giornate = sorted(list(set([m['matchday'] for m in st.session_state.live_data])))
-        default_idx = 0; now_utc = datetime.now(timezone.utc); min_diff = timedelta(days=999)
+        default_idx = 0
+        now_utc = datetime.now(timezone.utc)
+        min_diff = timedelta(days=999)
         for i, g in enumerate(giornate):
             for m in st.session_state.live_data:
                 if m['matchday'] == g:
                     try:
-                        match_dt = datetime.fromisoformat(m["utcDate"].replace("Z", "+00:00"))
+                        match_dt = datetime.fromisoformat(m['utcDate'].replace("Z", "+00:00"))
                         diff = abs(match_dt - now_utc)
-                        if diff < min_diff: min_diff = diff; default_idx = i
+                        if diff < min_diff:
+                            min_diff = diff
+                            default_idx = i
                     except: pass
         g_sel = st.selectbox("GIORNATA", giornate, index=default_idx)
     else: g_sel = None
@@ -582,4 +508,104 @@ with tab1:
             st.success(f"✅ {n} partite analizzate e salvate!")
             
     for idx, match in enumerate(matches):
-        h_api = match['homeTeam'].get('shortName') or match['homeTeam'].get('name', '?'); a_api = match['awayTeam'].get('shortName') or match['awayTeam'].get('name', '?')
+        h_api = match['homeTeam'].get('shortName') or match['homeTeam'].get('name', '?')
+        a_api = match['awayTeam'].get('shortName') or match['awayTeam'].get('name', '?')
+        h_cl, a_cl = clean_name(h_api), clean_name(a_api)
+        dt = (datetime.strptime(match['utcDate'], "%Y-%m-%dT%H:%M:%SZ") + timedelta(hours=2)).strftime("%d/%m | %H:%M")
+        match_status = match.get('status', 'TIMED')
+        gh_match = match.get('score', {}).get('fullTime', {}).get('home')
+        ga_match = match.get('score', {}).get('fullTime', {}).get('away')
+        result_str = ""
+        if match_status == "FINISHED" and gh_match is not None and ga_match is not None:
+            result_str = f"<b class='match-result'>RISULTATO: {gh_match} - {ga_match}</b>"
+        h_s = team_stats.get(h_cl, {'att': 1.0, 'def': 1.0}); a_s = team_stats.get(a_cl, {'att': 1.0, 'def': 1.0})
+        m = get_full_poisson(h_s['att'] * a_s['def'] * avg_h, a_s['att'] * h_s['def'] * avg_a)
+        with st.container():
+            st.markdown('<div class="match-card">', unsafe_allow_html=True)
+            c_h, c1, c3, c5, c6 = st.columns([1.5, 1.2, 0.8, 1, 0.4])
+            with c_h: st.markdown(f"<span class='team-name'>{h_api}<br>{a_api}</span><br><span class='match-date'>🕒 {dt}</span>{result_str}", unsafe_allow_html=True)
+            with c1: st.markdown(f"<div class='stat-container'><span class='label-header'>Esito 1X2</span><div style='display:flex; justify-content:space-around'><div>1<br><b>{m['1']:.0%}</b></div><div>X<br><b>{m['X']:.0%}</b></div><div>2<br><b>{m['2']:.0%}</b></div></div></div>", unsafe_allow_html=True)
+            with c3: st.markdown(f"<div class='stat-container'><span class='label-header'>U/O 2.5</span><b>{m['u25']:.0%}</b> / <b>{(1-m['u25']):.0%}</b></div>", unsafe_allow_html=True)
+            with c5: st.markdown(f"<div class='stat-container'><span class='label-header'>GG / NG</span><b>{m['gg']:.0%}</b> / <b>{(1-m['gg']):.0%}</b></div>", unsafe_allow_html=True)
+            with c6: 
+                st.write("<br>", unsafe_allow_html=True)
+                if match_status != "FINISHED":
+                    st.button("🔍", key=f"ex_{idx}", on_click=show_details, args=(h_api, a_api, m, camp_sel))
+            st.markdown("</div>", unsafe_allow_html=True)
+ else: st.info("👋 Terminale Pronto. Sincronizza il campionato per caricare le partite.")
+
+with tab2:
+    st.subheader("🌟 Top 10 Analisi Mix Globale")
+    st.caption("Analizza la prossima giornata di tutti i campionati e mostra le 10 migliori probabilità.")
+    if st.button("🚀 Calcola Top 10 Globale", type="primary"):
+        top_10, missing = fetch_and_calc_top_mix()
+        if missing: st.warning(f"⚠️ Dati storici mancanti per: {', '.join(missing)}.")
+        if not top_10: st.error("Nessun dato trovato.")
+        else:
+            salvate_count = 0
+            for i, p in enumerate(top_10):
+                dt = (datetime.strptime(p['utcDate'], "%Y-%m-%dT%H:%M:%SZ") + timedelta(hours=2)).strftime("%d/%m %H:%M")
+                st.markdown(f"""<div class="top-mix-row"><div style="flex: 1;"><b>#{i+1}</b> - {p['home']} vs {p['away']}<br><small>🏆 {p['league']} G{p['giornata']} | 🕒 {dt}</small></div><div style="text-align: right; color: #28a745; font-weight: 800; font-size: 18px;">{p['market']}<br><small>{p['prob_val']}%</small></div></div>""", unsafe_allow_html=True)
+                match_date_str = (datetime.strptime(p['utcDate'], "%Y-%m-%dT%H:%M:%SZ") + timedelta(hours=2)).strftime("%d/%m/%Y %H:%M")
+                pron = f"{p['market']} - {p['prob_val']}% - Top Mix Automatico"
+                if p.get('match_id'): save_prediction_entry(p['match_id'], p['home'], p['away'], p['league'], p['giornata'], match_date_str, pron, [], p['prob_val'], ""); salvate_count += 1
+            st.success(f"✅ {salvate_count} pronostici Top Mix salvati!")
+
+with tab3:
+    st.subheader("📒 Registro Predizioni")
+    
+    # FILTRI REGISTRO
+    col_f1, col_f2, col_f3 = st.columns([2, 2, 1])
+    with col_f1: filter_camp = st.selectbox("Campionato", ["Tutti", "Serie A", "Premier League", "La Liga", "Bundesliga"], key="reg_camp")
+    with col_f2: filter_tipo = st.selectbox("Tipo Analisi", ["Tutti", "Top Mix", "Analisi Singola"], key="reg_tipo")
+    with col_f3:
+        st.write("") # Spaziatore
+        if st.button("🗑️ Svuota", type="secondary"): save_predictions([]); st.success("Svuotato!"); st.rerun()
+            
+    try:
+        n_agg = aggiorna_risultati_reali(API_KEY_DATA)
+        if n_agg > 0: st.toast(f"✅ {n_agg} risultati aggiornati!")
+    except: pass
+    
+    preds = load_predictions()
+    
+    # Applica filtri
+    filtered_preds = []
+    for p in preds:
+        if filter_camp != "Tutti" and p.get("campionato") != filter_camp: continue
+        tipo = p.get("tipo", "Analisi")
+        if filter_tipo == "Top Mix" and tipo != "Top Mix": continue
+        if filter_tipo == "Analisi Singola" and tipo != "Analisi": continue
+        filtered_preds.append(p)
+        
+    if not filtered_preds: st.info("Nessuna predizione corrisponde ai filtri selezionati.")
+    else:
+        totale = len(filtered_preds)
+        ok = sum(1 for p in filtered_preds if p.get("esito") == "✅")
+        ko = sum(1 for p in filtered_preds if p.get("esito") == "❌")
+        c1, c2, c3, c4 = st.columns(4)
+        c1.metric("Totale", totale); c2.metric("✅ Corretti", ok); c3.metric("❌ Errati", ko)
+        c4.metric("Accuracy", f"{(ok/(ok+ko))*100:.1f}%" if (ok+ko)>0 else "—")
+        st.divider()
+        
+        for p in sorted(filtered_preds, key=lambda x: x.get("data", ""), reverse=True):
+            esito = p.get("esito") or "⏳"
+            risultato = p.get("risultato_reale") or "—"
+            tipo = p.get("tipo", "Analisi")
+            tipo_class = "type-mix" if tipo == "Top Mix" else "type-single"
+            
+            st.markdown(f"""
+            <div class="pred-box">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                    <div><b>{p.get('home')} vs {p.get('away')}</b><span class="pred-type {tipo_class}">{tipo}</span></div>
+                    <div style="font-size:22px;">{esito}</div>
+                </div>
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <div style="font-size: 13px; color: #888;">
+                        G{p.get('giornata')} {p.get('campionato')} | {p.get('data','')}<br>
+                        🎯 {p.get('pronostico_sicuro','')}
+                    </div>
+                    <div style="font-size: 18px; font-weight: 800;">{risultato}</div>
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
