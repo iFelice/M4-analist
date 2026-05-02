@@ -39,7 +39,7 @@ st.markdown(f"""
     .stApp {{ background-color: {bg}; }}
         .maradona-header {{
         background: linear-gradient(135deg, rgba(0, 30, 60, 0.4), rgba(0, 80, 150, 0.4)), 
-                    url('https://github.com/user-attachments/assets/984aca51-2e1d-4c51-aaab-bd46cf99f11b');
+                    url('https://github.com/iFelice/M4-analist/blob/e05aaf0f298353fecc3734fab5d757afd492b518/images/gpt-image-1.5-high-fidelity_b_crea_un_banner_cari%20(1).png');
         background-size: cover; background-position: center; padding: 50px;
         border-radius: 0 0 24px 24px; text-align: center; margin: -60px -60px 40px -60px; color: white;
         box-shadow: 0 10px 30px rgba(0,0,0,0.3);
