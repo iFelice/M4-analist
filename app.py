@@ -37,11 +37,20 @@ st.markdown(f"""
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&display=swap');
     html, body, [data-testid="stapp"] {{ background-color: {bg} !important; color: {txt} !important; font-family: 'Inter', sans-serif; }}
     .stApp {{ background-color: {bg}; }}
-        .maradona-header {{
-        background: url('https://github.com/iFelice/M4-analist/blob/main/images/gpt-image-1.5-high-fidelity_b_crea_un_banner_cari%20(1).jpg?raw=true');
-        background-size: cover; background-position: center; padding: 40px;
-        border-radius: 0 0 20px 20px; text-align: center; margin: -60px -60px 30px -60px; color: white;
+          .maradona-header {{
+        background: url('https://github.com/iFelice/M4-analist/blob/main/images/gpt-image-1.5-high-fidelity_b_crea_un_banner_cari%20(1).jpg?raw=true') no-repeat center center;
+        background-size: contain;
+        background-color: #0b1a2e;
+        min-height: 250px;
+        padding: 30px 40px;
+        border-radius: 0 0 20px 20px;
+        text-align: center;
+        margin: -60px -60px 30px -60px;
+        color: white;
         box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+        display: flex;
+        align-items: center;
+        justify-content: center;
     }}
     .maradona-header h1, .maradona-header p {{
         text-shadow: 2px 2px 8px rgba(0,0,0,0.9); /* Ombra per rendere il testo leggibile sull'immagine */
