@@ -38,7 +38,7 @@ st.markdown(f"""
     html, body, [data-testid="stapp"] {{ background-color: {bg} !important; color: {txt} !important; font-family: 'Inter', sans-serif; }}
     .stApp {{ background-color: {bg}; }}
              .banner-fullwidth {{
-        margin: -50px -40px 20px -60px;
+        margin: -50px -40px 00px -40px;
         overflow: hidden;
         border-radius: 0 0 20px 20px;
         box-shadow: 0 4px 15px rgba(0,0,0,0.3);
