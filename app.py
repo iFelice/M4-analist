@@ -50,6 +50,10 @@ st.markdown(f"""
         margin: 0 auto !important;
         border-radius: 0 0 20px 20px;
     }}
+        [data-testid="stImageContainer"] {{
+        margin-top: -60px;
+        margin-bottom: 20px;
+    }}
     .match-card {{ background-color: {card}; border-radius: 12px; padding: 3px; margin-bottom: 8px; border: 1px solid {border}; box-shadow: 0 2px 8px rgba(0,0,0,0.05); }}
     .team-name {{ font-size: 19px; font-weight: 800; color: #58a6ff; text-transform: uppercase; }}
     .label-header {{ color: {lbl}; font-size: 15px !important; font-weight: 900; text-transform: uppercase; display: block; margin-bottom: 5px; border-bottom: 1px solid {border}; }}
@@ -426,9 +430,7 @@ TOP 3 MERCATI ALTERNATIVI: I 3 mercati con prob più alta dopo "{mercato_top}". 
         except Exception as e: st.error(f"Errore AI: {e}")
 
 # --- UI PRINCIPALE ---
-st.markdown("""<div class="banner-fullwidth">
-    <img src="https://raw.githubusercontent.com/iFelice/M4-analist/main/images/gpt-image-1.5-high-fidelity_b_crea_un_banner_cari%20(1).jpg" alt="M4 Banner">
-</div>""", unsafe_allow_html=True)
+st.image("https://raw.githubusercontent.com/iFelice/M4-analist/main/images/gpt-image-1.5-high-fidelity_b_crea_un_banner_cari%20(1).jpg", use_container_width=True)
 
 with st.sidebar:
     st.title("🎩 Billy Walters Chat")
