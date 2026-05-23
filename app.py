@@ -37,16 +37,17 @@ st.markdown(f"""
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&display=swap');
     html, body, [data-testid="stapp"] {{ background-color: {bg} !important; color: {txt} !important; font-family: 'Inter', sans-serif; }}
     .stApp {{ background-color: {bg}; }}
-          .maradona-header {{
-        padding: 0;
-        margin: -60px -60px 30px -60px;
-        text-align: center;
-        box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+             .banner-fullwidth {{
+        margin: -70px -60px 20px -60px;
         overflow: hidden;
+        border-radius: 0 0 20px 20px;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.3);
     }}
-    .maradona-header img {{
-        width: 100%;
-        display: block;
+    .banner-fullwidth img {{
+        width: 100% !important;
+        max-width: 100% !important;
+        display: block !important;
+        margin: 0 auto !important;
         border-radius: 0 0 20px 20px;
     }}
     .match-card {{ background-color: {card}; border-radius: 12px; padding: 3px; margin-bottom: 8px; border: 1px solid {border}; box-shadow: 0 2px 8px rgba(0,0,0,0.05); }}
@@ -425,8 +426,8 @@ TOP 3 MERCATI ALTERNATIVI: I 3 mercati con prob più alta dopo "{mercato_top}". 
         except Exception as e: st.error(f"Errore AI: {e}")
 
 # --- UI PRINCIPALE ---
-st.markdown("""<div class="maradona-header">
-    <img src="https://github.com/iFelice/M4-analist/blob/main/images/gpt-image-1.5-high-fidelity_b_crea_un_banner_cari%20(1).jpg?raw=true" alt="M4 Banner">
+st.markdown("""<div class="banner-fullwidth">
+    <img src="https://raw.githubusercontent.com/iFelice/M4-analist/main/images/gpt-image-1.5-high-fidelity_b_crea_un_banner_cari%20(1).jpg" alt="M4 Banner">
 </div>""", unsafe_allow_html=True)
 
 with st.sidebar:
