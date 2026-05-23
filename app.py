@@ -37,11 +37,14 @@ st.markdown(f"""
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&display=swap');
     html, body, [data-testid="stapp"] {{ background-color: {bg} !important; color: {txt} !important; font-family: 'Inter', sans-serif; }}
     .stApp {{ background-color: {bg}; }}
-    .maradona-header {{
-        background: linear-gradient(rgba(0, 45, 91, 0.8), rgba(0, 45, 91, 0.8)), 
-                    url('https://images.unsplash.com/photo-1574629810360-7efbbe195018?auto=format&fit=crop&w=1600&q=80');
+        .maradona-header {{
+        background: url('https://github.com/iFelice/M4-analist/blob/main/images/gpt-image-1.5-high-fidelity_b_crea_un_banner_cari%20(1).jpg?raw=true');
         background-size: cover; background-position: center; padding: 40px;
         border-radius: 0 0 20px 20px; text-align: center; margin: -60px -60px 30px -60px; color: white;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+    }}
+    .maradona-header h1, .maradona-header p {{
+        text-shadow: 2px 2px 8px rgba(0,0,0,0.9); /* Ombra per rendere il testo leggibile sull'immagine */
     }}
     .match-card {{ background-color: {card}; border-radius: 12px; padding: 3px; margin-bottom: 8px; border: 1px solid {border}; box-shadow: 0 2px 8px rgba(0,0,0,0.05); }}
     .team-name {{ font-size: 19px; font-weight: 800; color: #58a6ff; text-transform: uppercase; }}
@@ -419,7 +422,7 @@ TOP 3 MERCATI ALTERNATIVI: I 3 mercati con prob più alta dopo "{mercato_top}". 
         except Exception as e: st.error(f"Errore AI: {e}")
 
 # --- UI PRINCIPALE ---
-st.markdown('<div class="maradona-header"><h1>M4 STRATEGIC TERMINAL</h1><p>Intelligence Evolution v38.0</p></div>', unsafe_allow_html=True)
+st.markdown('<div class="maradona-header"></div>', unsafe_allow_html=True)
 
 with st.sidebar:
     st.title("🎩 Billy Walters Chat")
